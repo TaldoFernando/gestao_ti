@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { login } from '../api';
 import { Button, ErrorText, Field, input } from '../ui';
 
@@ -43,6 +43,7 @@ export default function Login() {
           </Field>
           <ErrorText>{error}</ErrorText>
           <Button variant="primary" disabled={busy} className="w-full">{busy ? 'Entrando…' : 'Entrar'}</Button>
+          <p className="text-sm text-muted">Precisa de suporte? <Link to="/abrir-chamado" className="text-ink underline underline-offset-4">Abra um chamado</Link> sem login.</p>
         </form>
       </section>
     </div>

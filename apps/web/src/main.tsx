@@ -6,6 +6,8 @@ import Login from './pages/Login';
 import Overview from './pages/Overview';
 import EquipmentPage from './pages/Equipment';
 import SectorsPage from './pages/Sectors';
+import { OpenTicket, TrackTicket } from './pages/Public';
+import { TicketDetail, TicketList } from './pages/Tickets';
 import './index.css';
 
 function Layout() {
@@ -19,6 +21,7 @@ function Layout() {
         <b className="text-lg font-semibold text-white md:mb-6">TI Prefeitura</b>
         <nav className="flex gap-5 md:flex-col md:gap-0" aria-label="Navegação principal">
           <NavLink to="/" end className={link}>Visão geral</NavLink>
+          {s.user.role === 'TECNICO' && <NavLink to="/chamados" className={link}>Chamados</NavLink>}
           <NavLink to="/equipamentos" className={link}>Equipamentos</NavLink>
           <NavLink to="/setores" className={link}>Setores</NavLink>
         </nav>
@@ -39,10 +42,14 @@ createRoot(document.getElementById('root')!).render(
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/abrir-chamado" element={<OpenTicket />} />
+        <Route path="/acompanhar/:protocol?" element={<TrackTicket />} />
         <Route element={<Layout />}>
           <Route index element={<Overview />} />
           <Route path="equipamentos" element={<EquipmentPage />} />
           <Route path="setores" element={<SectorsPage />} />
+          <Route path="chamados" element={<TicketList />} />
+          <Route path="chamados/:id" element={<TicketDetail />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

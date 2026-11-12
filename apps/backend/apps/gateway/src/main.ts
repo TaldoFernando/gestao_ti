@@ -40,8 +40,8 @@ function guard(req: Request, res: Response, next: NextFunction) {
     return;
   }
   // Os serviços confiam nestes cabeçalhos; nunca aceitar os que vêm do cliente.
-  for (const h of ['x-user-id', 'x-user-role', 'x-user-sector']) delete req.headers[h];
-  if (user) Object.assign(req.headers, { 'x-user-id': user.sub, 'x-user-role': user.role, 'x-user-sector': user.sectorId ?? '' });
+  for (const h of ['x-user-id', 'x-user-role', 'x-user-sector', 'x-user-name']) delete req.headers[h];
+  if (user) Object.assign(req.headers, { 'x-user-id': user.sub, 'x-user-role': user.role, 'x-user-sector': user.sectorId ?? '', 'x-user-name': encodeURIComponent(user.name) });
   next();
 }
 

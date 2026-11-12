@@ -35,6 +35,9 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres-tickets:5432/db_tickets
       RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672
+      ASSET_SERVICE_URL: http://asset-service:3000
+      UPLOAD_DIR: /data/uploads
+    volumes: [uploads:/data/uploads]
     depends_on:
       postgres-tickets: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
@@ -84,3 +87,4 @@ services:
 volumes:
   pgdata-tickets:
   pgdata-assets:
+  uploads:

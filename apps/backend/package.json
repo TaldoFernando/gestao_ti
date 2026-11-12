@@ -6,7 +6,7 @@
     "start:dev": "nest start --watch",
     "lint": "tsc --noEmit -p tsconfig.json",
     "test": "jest",
-    "postinstall": "prisma generate --schema apps/asset-service/prisma/schema.prisma"
+    "postinstall": "prisma generate --schema apps/asset-service/prisma/schema.prisma && prisma generate --schema apps/ticket-service/prisma/schema.prisma"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
@@ -29,6 +29,7 @@
     "@nestjs/testing": "^11.0.0",
     "@types/express": "^5.0.6",
     "@types/jest": "^29.5.12",
+    "@types/multer": "^2.3.0",
     "@types/node": "^22.0.0",
     "@types/supertest": "^6.0.2",
     "jest": "^29.7.0",
