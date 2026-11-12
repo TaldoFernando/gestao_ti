@@ -1,4 +1,5 @@
 const STORAGE_KEY = 'ti-prefeitura-inventario-v1';
+const defaultEquipmentTypes = ['Computador', 'Notebook', 'Monitor', 'Impressora', 'Roteador', 'Switch', 'Nobreak', 'Telefone', 'Projetor', 'Scanner', 'Servidor'];
 const starterData = {
   sectors: [
     { id: 'setor-educacao', name: 'Secretaria Municipal de Educação', type: 'Secretaria', description: '', parentId: null },
@@ -14,6 +15,7 @@ const starterData = {
     { id: 'equip-3', name: 'Impressora HP LaserJet', type: 'Impressora', assetTag: 'PAT-00201', serial: 'HP-LJ-5512', sectorId: 'ubs-central' },
     { id: 'equip-4', name: 'Notebook Lenovo ThinkPad', type: 'Notebook', assetTag: 'PAT-00311', serial: 'LN-8840Q', sectorId: 'setor-administracao' },
   ],
+  equipmentTypes: [...defaultEquipmentTypes],
 };
 
 function loadData() {
@@ -23,6 +25,8 @@ function loadData() {
     const parsed = JSON.parse(saved);
     if (!Array.isArray(parsed.sectors) || !Array.isArray(parsed.equipment)) throw new Error('Invalid inventory');
     parsed.sectors = parsed.sectors.map((sector) => ({ ...sector, parentId: sector.parentId || null }));
+    const savedTypes = Array.isArray(parsed.equipmentTypes) ? parsed.equipmentTypes : [];
+    parsed.equipmentTypes = [...new Map([...defaultEquipmentTypes, ...savedTypes, ...parsed.equipment.map((item) => item.type).filter(Boolean)].map((type) => [type.toLocaleLowerCase('pt-BR'), type])).values()];
     return parsed;
   } catch {
     return structuredClone(starterData);
@@ -34,6 +38,7 @@ let pendingDelete = null;
 let editingEquipmentId = null;
 let openSectorId = null;
 let isEditingFromSector = false;
+let expandedSectorGroupId = null;
 const $ = (selector) => document.querySelector(selector);
 const escapeHTML = (value = '') => String(value).replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
 const sectorById = (id) => data.sectors.find((sector) => sector.id === id);
@@ -69,16 +74,32 @@ function renderSummary() {
 function renderSelects() {
   const selectedSector = $('#sector-filter').value;
   const selectedType = $('#type-filter').value;
+  const selectedEquipmentType = $('#equipment-type').value;
   const orderedSectors = data.sectors.filter((sector) => !sector.parentId).flatMap((sector) => [sector, ...childrenOf(sector.id)]);
   const sectorOptions = orderedSectors.map((sector) => `<option value="${escapeHTML(sector.id)}">${sector.parentId ? '↳ ' : ''}${escapeHTML(sector.name)}${sector.parentId ? ` (${escapeHTML(rootSector(sector)?.name || '')})` : ''}</option>`).join('');
   $('#sector-filter').innerHTML = `<option value="">Todos os locais</option>${sectorOptions}`;
   $('#equipment-sector').innerHTML = `<option value="">Sem setor definido</option>${sectorOptions}`;
   $('#sector-parent').innerHTML = `<option value="">Nenhum — cadastrar como setor principal</option>${data.sectors.filter((sector) => !sector.parentId).map((sector) => `<option value="${escapeHTML(sector.id)}">${escapeHTML(sector.name)}</option>`).join('')}`;
   $('#sector-filter').value = data.sectors.some((sector) => sector.id === selectedSector) ? selectedSector : '';
-  const types = [...new Set(data.equipment.map((item) => item.type).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  const types = [...new Set([...data.equipmentTypes, ...data.equipment.map((item) => item.type).filter(Boolean)])].sort((a, b) => a.localeCompare(b, 'pt-BR'));
   $('#type-filter').innerHTML = `<option value="">Todos os tipos</option>${types.map((type) => `<option value="${escapeHTML(type)}">${escapeHTML(type)}</option>`).join('')}`;
   $('#type-filter').value = types.includes(selectedType) ? selectedType : '';
-  $('#equipment-types').innerHTML = types.map((type) => `<option value="${escapeHTML(type)}">`).join('');
+  $('#equipment-type').innerHTML = `<option value="">Selecione um tipo</option>${types.map((type) => `<option value="${escapeHTML(type)}">${escapeHTML(type)}</option>`).join('')}`;
+  $('#equipment-type').value = types.includes(selectedEquipmentType) ? selectedEquipmentType : '';
+  renderSectorPicker($('#equipment-sector').value);
+}
+
+function renderSectorPicker(selectedId = '') {
+  const selectedSector = sectorById(selectedId);
+  $('#sector-picker-label').textContent = selectedSector ? sectorPath(selectedSector) : 'Sem setor definido';
+  const roots = data.sectors.filter((sector) => !sector.parentId);
+  const groups = roots.map((sector) => {
+    const children = childrenOf(sector.id);
+    const expanded = expandedSectorGroupId === sector.id;
+    const childOptions = children.map((child) => `<button class="picker-child ${selectedId === child.id ? 'selected' : ''}" type="button" data-select-sector="${escapeHTML(child.id)}"><span class="picker-child-mark">↳</span><span>${escapeHTML(child.name)}<small>${escapeHTML(child.type)}</small></span></button>`).join('');
+    return `<div class="picker-group"><div class="picker-root-row"><button class="picker-root-choice ${selectedId === sector.id ? 'selected' : ''}" type="button" data-select-sector="${escapeHTML(sector.id)}"><span class="picker-building">⌂</span><span>${escapeHTML(sector.name)}<small>${escapeHTML(sector.type)}</small></span></button>${children.length ? `<button class="picker-expand" type="button" data-expand-sector="${escapeHTML(sector.id)}" aria-expanded="${expanded}">${expanded ? 'Fechar' : 'Abrir'} <span>${expanded ? '⌃' : '⌄'}</span></button>` : ''}</div>${children.length ? `<div class="picker-children" ${expanded ? '' : 'hidden'}>${childOptions}</div>` : ''}</div>`;
+  }).join('');
+  $('#sector-picker-options').innerHTML = `<button class="picker-unassigned ${selectedId ? '' : 'selected'}" type="button" data-select-sector="">Sem setor definido</button>${groups || '<p class="muted picker-empty">Cadastre um setor para poder alocar equipamentos.</p>'}`;
 }
 
 function renderEquipment() {
@@ -135,15 +156,20 @@ function switchView(view) {
 
 function openEquipmentDialog(equipmentId = null) {
   $('#equipment-form').reset();
+  expandedSectorGroupId = null;
+  $('#sector-picker-options').hidden = true;
+  $('#sector-picker-toggle').setAttribute('aria-expanded', 'false');
   editingEquipmentId = equipmentId;
   if (equipmentId) {
     const item = data.equipment.find((equipment) => equipment.id === equipmentId);
     if (!item) return;
     const form = $('#equipment-form');
     for (const field of ['name', 'type', 'assetTag', 'serial', 'sectorId']) form.elements[field].value = item[field] || '';
+    renderSectorPicker(item.sectorId || '');
     $('#equipment-dialog-title').textContent = 'Editar equipamento';
     $('#save-equipment').textContent = 'Salvar alterações';
   } else {
+    renderSectorPicker('');
     $('#equipment-dialog-title').textContent = 'Cadastrar equipamento';
     $('#save-equipment').textContent = 'Salvar equipamento';
   }
@@ -248,6 +274,37 @@ $('#sector-form').addEventListener('submit', (event) => {
 });
 
 document.addEventListener('click', (event) => {
+  if (event.target.closest('#add-equipment-type')) {
+    $('#equipment-type-form').reset();
+    $('#equipment-type-dialog').showModal();
+    $('#equipment-type-form').elements.type.focus();
+    return;
+  }
+  if (event.target.closest('#sector-picker-toggle')) {
+    const menu = $('#sector-picker-options');
+    const willOpen = menu.hidden;
+    expandedSectorGroupId = null;
+    renderSectorPicker($('#equipment-sector').value);
+    menu.hidden = !willOpen;
+    $('#sector-picker-toggle').setAttribute('aria-expanded', String(willOpen));
+    return;
+  }
+  const expandGroup = event.target.closest('[data-expand-sector]');
+  if (expandGroup) {
+    expandedSectorGroupId = expandedSectorGroupId === expandGroup.dataset.expandSector ? null : expandGroup.dataset.expandSector;
+    renderSectorPicker($('#equipment-sector').value);
+    return;
+  }
+  const selectedLocation = event.target.closest('[data-select-sector]');
+  if (selectedLocation) {
+    const sectorId = selectedLocation.dataset.selectSector;
+    $('#equipment-sector').value = sectorId;
+    expandedSectorGroupId = null;
+    renderSectorPicker(sectorId);
+    $('#sector-picker-options').hidden = true;
+    $('#sector-picker-toggle').setAttribute('aria-expanded', 'false');
+    return;
+  }
   if (event.target.closest('#add-equipment')) {
     openEquipmentDialog();
     return;
@@ -268,6 +325,25 @@ document.addEventListener('click', (event) => {
   if (openSectorButton) showSectorDetails(openSectorButton.dataset.openSector);
   const addLocationButton = event.target.closest('[data-add-location]');
   if (addLocationButton) openSectorDialog(addLocationButton.dataset.addLocation);
+});
+
+$('#equipment-type-form').addEventListener('submit', (event) => {
+  event.preventDefault();
+  const type = new FormData(event.currentTarget).get('type').trim();
+  const existing = data.equipmentTypes.find((item) => item.toLocaleLowerCase('pt-BR') === type.toLocaleLowerCase('pt-BR'));
+  if (existing) {
+    renderSelects();
+    $('#equipment-type').value = existing;
+    $('#equipment-type-dialog').close();
+    showToast('Esse tipo já está cadastrado.');
+    return;
+  }
+  data.equipmentTypes.push(type);
+  saveData();
+  renderSelects();
+  $('#equipment-type').value = type;
+  $('#equipment-type-dialog').close();
+  showToast('Novo tipo cadastrado.');
 });
 
 $('#sector-detail-dialog').addEventListener('close', () => {
