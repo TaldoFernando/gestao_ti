@@ -1,6 +1,6 @@
 import {
   ArgumentsHost, BadRequestException, Body, Catch, ConflictException, Controller, Delete, ExceptionFilter,
-  Get, HttpCode, Module, NotFoundException, Param, ParseUUIDPipe, Patch, Post, Query, ValidationPipe,
+  Get, Headers, HttpCode, Module, NotFoundException, Param, ParseUUIDPipe, Patch, Post, Query, ValidationPipe,
 } from '@nestjs/common';
 import { BaseExceptionFilter, NestFactory } from '@nestjs/core';
 import { HealthController } from '@app/common';
@@ -56,35 +56,84 @@ class SectorsController {
   }
 }
 
+type Hdrs = Record<string, string | undefined>;
+const byName = (h: Hdrs) => decodeURIComponent(h['x-user-name'] ?? 'Sistema');
+
+/**
+ * Setores que o usuário pode ver. null = todos (técnico).
+ * Responsável vê o próprio setor e, se for principal, os locais vinculados. Sem setor, não vê nada.
+ */
+async function scope(h: Hdrs): Promise<string[] | null> {
+  if (h['x-user-role'] !== 'RESPONSAVEL') return null;
+  const own = h['x-user-sector'];
+  if (!own) return [];
+  const children = await db.sector.findMany({ where: { parentId: own }, select: { id: true } });
+  return [own, ...children.map((c) => c.id)];
+}
+
+async function assertVisible(h: Hdrs, equipmentId: string) {
+  const ids = await scope(h);
+  const e = await db.equipment.findUnique({ where: { id: equipmentId } });
+  if (!e || (ids && !ids.includes(e.sectorId ?? ''))) notFound();
+  return e;
+}
+
+const sectorLabel = async (id: string | null | undefined) => {
+  if (!id) return null;
+  const s = await db.sector.findUnique({ where: { id }, include: { parent: true } });
+  return s ? (s.parent ? `${s.parent.name} › ${s.name}` : s.name) : null;
+};
+
 @Controller('equipment')
 class EquipmentController {
   // sectorId inclui os locais vinculados, como o filtro do protótipo.
   @Get()
-  list(@Query('sectorId') sectorId?: string, @Query('type') type?: string, @Query('q') q?: string) {
+  async list(@Headers() h: Hdrs, @Query('sectorId') sectorId?: string, @Query('type') type?: string, @Query('q') q?: string) {
     const where: Prisma.EquipmentWhereInput = {};
+    const and: Prisma.EquipmentWhereInput[] = [];
+    const ids = await scope(h);
+    if (ids) and.push({ sectorId: { in: ids } });
     if (sectorId === 'none') where.sectorId = null;
-    else if (sectorId) where.OR = [{ sectorId }, { sector: { parentId: sectorId } }];
+    else if (sectorId) and.push({ OR: [{ sectorId }, { sector: { parentId: sectorId } }] });
     if (type) where.type = type;
     if (q) {
       const like = { contains: q, mode: 'insensitive' as const };
-      where.AND = [{ OR: [{ name: like }, { type: like }, { assetTag: like }, { serial: like }, { sector: { name: like } }] }];
+      and.push({ OR: [{ name: like }, { type: like }, { assetTag: like }, { serial: like }, { sector: { name: like } }] });
     }
+    where.AND = and;
     return db.equipment.findMany({ where, orderBy: { name: 'asc' }, include: { sector: { include: { parent: true } } } });
   }
 
   @Get(':id')
-  async get(@Param('id', ParseUUIDPipe) id: string) {
-    return (await db.equipment.findUnique({ where: { id }, include: { sector: true } })) ?? notFound();
+  async get(@Param('id', ParseUUIDPipe) id: string, @Headers() h: Hdrs) {
+    await assertVisible(h, id);
+    return db.equipment.findUnique({ where: { id }, include: { sector: true } });
+  }
+
+  @Get(':id/movements')
+  async movements(@Param('id', ParseUUIDPipe) id: string, @Headers() h: Hdrs) {
+    await assertVisible(h, id);
+    return db.movement.findMany({ where: { equipmentId: id }, orderBy: { at: 'desc' } });
   }
 
   @Post()
-  create(@Body() dto: CreateEquipmentDto) {
-    return db.equipment.create({ data: { ...dto, assetTag: dto.assetTag || null } });
+  async create(@Body() dto: CreateEquipmentDto, @Headers() h: Hdrs) {
+    const toName = await sectorLabel(dto.sectorId);
+    return db.equipment.create({
+      data: { ...dto, assetTag: dto.assetTag || null, movements: { create: { fromName: null, toName, byName: byName(h) } } },
+    });
   }
 
+  // Mudou de local → registra a movimentação na mesma transação.
   @Patch(':id')
-  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateEquipmentDto) {
-    return db.equipment.update({ where: { id }, data: dto.assetTag === '' ? { ...dto, assetTag: null } : dto });
+  async update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateEquipmentDto, @Headers() h: Hdrs) {
+    const current = await db.equipment.findUnique({ where: { id } });
+    if (!current) notFound();
+    const data = dto.assetTag === '' ? { ...dto, assetTag: null } : dto;
+    const moved = dto.sectorId !== undefined && (dto.sectorId ?? null) !== current.sectorId;
+    if (!moved) return db.equipment.update({ where: { id }, data });
+    const [fromName, toName] = await Promise.all([sectorLabel(current.sectorId), sectorLabel(dto.sectorId)]);
+    return db.equipment.update({ where: { id }, data: { ...data, movements: { create: { fromName, toName, byName: byName(h) } } } });
   }
 
   @Delete(':id') @HttpCode(204)

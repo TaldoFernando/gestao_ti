@@ -1,6 +1,7 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router';
-import { api, session, sectorPath, type Equipment, type Sector } from '../api';
+import { api, session, sectorPath, type Equipment, type Movement, type Sector } from '../api';
+import { formatDate } from './tickets-shared';
 import { Button, Confirm, Dialog, ErrorText, Field, input, Pill, useInventory } from '../ui';
 
 export default function EquipmentPage() {
@@ -10,6 +11,7 @@ export default function EquipmentPage() {
   const [type, setType] = useState('');
   const [editing, setEditing] = useState<Equipment | 'new' | null>(null);
   const [deleting, setDeleting] = useState<Equipment | null>(null);
+  const [history, setHistory] = useState<Equipment | null>(null);
   const canEdit = session()?.user.role === 'TECNICO';
 
   const sectorId = params.get('setor') ?? '';
@@ -70,6 +72,7 @@ export default function EquipmentPage() {
                 <td className="whitespace-nowrap py-3.5 pr-5 font-mono text-[13px]">{e.serial ?? '—'}</td>
                 <td className="py-3.5 pr-5 text-muted">{sectorPath(sectors, e.sectorId) || 'Sem local'}</td>
                 <td className="whitespace-nowrap py-1.5 text-right">
+                  <Button variant="ghost" className="h-9 px-3" onClick={() => setHistory(e)}>Histórico</Button>
                   {canEdit && (
                     <>
                       <Button variant="ghost" className="h-9 px-3" onClick={() => setEditing(e)}>Editar</Button>
@@ -87,6 +90,7 @@ export default function EquipmentPage() {
       </div>
 
       <EquipmentForm sectors={sectors} types={types} value={editing} onClose={() => setEditing(null)} onSaved={reload} />
+      <History equipment={history} onClose={() => setHistory(null)} />
       <Confirm
         text={deleting && `O equipamento “${deleting.name}” será removido do cadastro.`}
         onClose={() => setDeleting(null)}
@@ -96,6 +100,33 @@ export default function EquipmentPage() {
         }}
       />
     </>
+  );
+}
+
+function History({ equipment, onClose }: { equipment: Equipment | null; onClose: () => void }) {
+  const [rows, setRows] = useState<Movement[] | null>(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    setRows(null);
+    setError('');
+    if (equipment) api<Movement[]>(`/equipment/${equipment.id}/movements`).then(setRows).catch((e: Error) => setError(e.message));
+  }, [equipment]);
+  return (
+    <Dialog open={equipment !== null} onClose={onClose} title={equipment ? `Histórico · ${equipment.name}` : ''}>
+      <ErrorText>{error}</ErrorText>
+      {rows && !rows.length && <p className="text-muted">Sem movimentações registradas.</p>}
+      <ol className="border-l border-line">
+        {rows?.map((m) => (
+          <li key={m.id} className="relative pb-5 pl-6 before:absolute before:-left-[5px] before:top-1.5 before:size-[9px] before:rounded-full before:bg-ink">
+            <p className="text-sm text-muted">{formatDate(m.at)} · {m.byName}</p>
+            <p className="mt-0.5">
+              {m.fromName ? <>{m.fromName} <span className="text-muted">→</span> </> : <span className="text-muted">Cadastrado em </span>}
+              {m.toName ?? 'Sem local'}
+            </p>
+          </li>
+        ))}
+      </ol>
+    </Dialog>
   );
 }
 

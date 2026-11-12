@@ -74,3 +74,6 @@ export function equipmentIn(sectorId: string, sectors: Sector[], equipment: Equi
   const ids = new Set([sectorId, ...sectors.filter((s) => s.parentId === sectorId).map((s) => s.id)]);
   return equipment.filter((e) => e.sectorId && ids.has(e.sectorId));
 }
+
+export type Movement = { id: string; fromName: string | null; toName: string | null; byName: string; at: string };
+export type AppUser = { id: string; name: string; email: string; role: Role; sectorId: string | null };

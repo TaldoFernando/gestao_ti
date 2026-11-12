@@ -1,5 +1,17 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { api, type Equipment, type Sector } from './api';
+import { api, session, type Equipment, type Sector } from './api';
+
+/**
+ * Responsável vê só o próprio setor, os locais dele e o setor pai (para o caminho "Setor › Local").
+ * Só organiza a tela: quem restringe os equipamentos de verdade é o asset-service.
+ */
+function visibleSectors(all: Sector[]) {
+  const user = session()?.user;
+  if (user?.role !== 'RESPONSAVEL') return all;
+  const own = all.find((s) => s.id === user.sectorId);
+  if (!own) return [];
+  return all.filter((s) => s.id === own.id || s.parentId === own.id || s.id === own.parentId);
+}
 
 /** Carrega setores e equipamentos juntos; `reload` depois de qualquer alteração. */
 export function useInventory() {
@@ -10,7 +22,7 @@ export function useInventory() {
   const reload = () =>
     Promise.all([api<Sector[]>('/sectors'), api<Equipment[]>('/equipment')])
       .then(([s, e]) => {
-        setSectors(s);
+        setSectors(visibleSectors(s));
         setEquipment(e);
         setError('');
       })

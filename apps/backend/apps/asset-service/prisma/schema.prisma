@@ -39,6 +39,7 @@ model Equipment {
   sectorId  String?
   // SetNull: equipamento de setor excluído fica "sem local definido".
   sector    Sector?   @relation(fields: [sectorId], references: [id], onDelete: SetNull)
+  movements Movement[]
   createdAt DateTime  @default(now())
 }
 
@@ -58,4 +59,18 @@ model User {
   sectorId     String?
   sector       Sector?  @relation(fields: [sectorId], references: [id], onDelete: SetNull)
   createdAt    DateTime @default(now())
+}
+
+// Histórico de mudança de local. Os nomes ficam copiados: o registro continua legível
+// mesmo se o setor for renomeado ou excluído depois.
+model Movement {
+  id          String    @id @default(uuid())
+  equipmentId String
+  equipment   Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  fromName    String?
+  toName      String?
+  byName      String
+  at          DateTime  @default(now())
+
+  @@index([equipmentId, at])
 }

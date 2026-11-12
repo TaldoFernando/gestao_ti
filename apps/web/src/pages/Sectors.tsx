@@ -41,13 +41,16 @@ export default function SectorsPage() {
                 </p>
                 {root.description && <p className="mt-1 text-sm">{root.description}</p>}
               </div>
-              {canEdit && (
-                <div className="flex gap-1">
-                  <Button variant="ghost" className="h-9 px-3" onClick={() => setEditing({ parentId: root.id })}>Adicionar local</Button>
-                  <Button variant="ghost" className="h-9 px-3" onClick={() => setEditing({ sector: root, parentId: null })}>Editar</Button>
-                  <Button variant="ghost" className="h-9 px-3 text-[#c2381f]" onClick={() => setDeleting(root)}>Excluir</Button>
-                </div>
-              )}
+              <div className="flex gap-1">
+                <Link to={`/setores/${root.id}/relatorio`} className="flex h-9 items-center px-3 text-sm font-medium underline-offset-4 hover:underline">Relatório</Link>
+                {canEdit && (
+                  <>
+                    <Button variant="ghost" className="h-9 px-3" onClick={() => setEditing({ parentId: root.id })}>Adicionar local</Button>
+                    <Button variant="ghost" className="h-9 px-3" onClick={() => setEditing({ sector: root, parentId: null })}>Editar</Button>
+                    <Button variant="ghost" className="h-9 px-3 text-[#c2381f]" onClick={() => setDeleting(root)}>Excluir</Button>
+                  </>
+                )}
+              </div>
             </div>
 
             {children.length > 0 && (
@@ -59,12 +62,15 @@ export default function SectorsPage() {
                       <p className="truncate font-medium group-hover:underline">{c.name}</p>
                       <p className="text-sm text-muted"><span className="font-mono">{countOf(c.id)}</span> {countOf(c.id) === 1 ? 'equipamento' : 'equipamentos'}</p>
                     </Link>
-                    {canEdit && (
-                      <div className="flex shrink-0">
-                        <Button variant="ghost" className="h-9 px-3" onClick={() => setEditing({ sector: c, parentId: c.parentId })}>Editar</Button>
-                        <Button variant="ghost" className="h-9 px-3 text-[#c2381f]" onClick={() => setDeleting(c)}>Excluir</Button>
-                      </div>
-                    )}
+                    <div className="flex shrink-0">
+                      <Link to={`/setores/${c.id}/relatorio`} className="flex h-9 items-center px-3 text-sm font-medium underline-offset-4 hover:underline">Relatório</Link>
+                      {canEdit && (
+                        <>
+                          <Button variant="ghost" className="h-9 px-3" onClick={() => setEditing({ sector: c, parentId: c.parentId })}>Editar</Button>
+                          <Button variant="ghost" className="h-9 px-3 text-[#c2381f]" onClick={() => setDeleting(c)}>Excluir</Button>
+                        </>
+                      )}
+                    </div>
                   </li>
                 ))}
               </ul>
