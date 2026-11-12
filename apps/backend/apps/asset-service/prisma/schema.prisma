@@ -1,0 +1,42 @@
+generator client {
+  provider      = "prisma-client-js"
+  output        = "../../../node_modules/.prisma/asset"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Ownership {
+  PROPRIO
+  ALUGADO
+}
+
+// Setor principal (parentId nulo) ou local vinculado a ele (escola, UBS...).
+model Sector {
+  id          String      @id @default(uuid())
+  name        String
+  type        String
+  description String      @default("")
+  parentId    String?
+  // Restrict: não exclui setor principal com locais vinculados (regra do protótipo).
+  parent      Sector?     @relation("SectorTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children    Sector[]    @relation("SectorTree")
+  equipment   Equipment[]
+  createdAt   DateTime    @default(now())
+}
+
+model Equipment {
+  id        String    @id @default(uuid())
+  name      String
+  type      String
+  assetTag  String?   @unique
+  serial    String?
+  ownership Ownership @default(PROPRIO)
+  sectorId  String?
+  // SetNull: equipamento de setor excluído fica "sem local definido".
+  sector    Sector?   @relation(fields: [sectorId], references: [id], onDelete: SetNull)
+  createdAt DateTime  @default(now())
+}
