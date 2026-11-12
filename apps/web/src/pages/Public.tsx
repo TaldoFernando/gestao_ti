@@ -65,7 +65,7 @@ export function OpenTicket() {
         <div className="grid gap-5 sm:grid-cols-2">
           <Field label="Seu nome"><input name="requesterName" required maxLength={80} autoComplete="name" className={input} /></Field>
           <Field label="E-mail"><input name="email" type="email" required autoComplete="email" className={input} /></Field>
-          <Field label="WhatsApp com DDD"><input name="whatsapp" type="tel" required placeholder="(83) 99999-0000" autoComplete="tel" pattern="[\d\s()+\-]{10,20}" className={input} /></Field>
+          <Field label="WhatsApp com DDD"><input name="whatsapp" type="tel" required placeholder="(83) 99999-0000" autoComplete="tel" pattern="[\d\s\(\)\+\-]{10,20}" className={input} /></Field>
           <Field label="Setor ou local">
             <select name="sectorId" className={input} defaultValue="">
               <option value="">Não sei / outro</option>
