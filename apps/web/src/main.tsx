@@ -1,30 +1,51 @@
-import { StrictMode, useEffect, useState } from 'react';
+import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { BrowserRouter, Navigate, NavLink, Outlet, Route, Routes } from 'react-router';
+import { logout, session } from './api';
+import Login from './pages/Login';
+import Overview from './pages/Overview';
+import EquipmentPage from './pages/Equipment';
+import SectorsPage from './pages/Sectors';
 import './index.css';
 
-function App() {
-  const [api, setApi] = useState('verificando…');
-  useEffect(() => {
-    fetch('/api/health')
-      .then((r) => r.json())
-      .then((d) => setApi(d.status))
-      .catch(() => setApi('fora do ar'));
-  }, []);
-
+function Layout() {
+  const s = session();
+  if (!s) return <Navigate to="/login" replace />;
+  const link = ({ isActive }: { isActive: boolean }) =>
+    `flex h-11 items-center text-[15px] transition ${isActive ? 'text-white before:mr-2.5 before:h-0.5 before:w-3.5 before:bg-gold' : 'hover:text-white'}`;
   return (
-    <div className="grid min-h-screen grid-cols-[220px_1fr] bg-white font-sans text-ink">
-      <aside className="flex flex-col gap-1 bg-ink px-5 py-6 text-[#9a9a9a]">
-        <b className="mb-6 text-lg font-semibold text-white">TI Prefeitura</b>
-        <span className="py-2 text-white before:mr-2.5 before:inline-block before:h-0.5 before:w-3.5 before:bg-gold before:align-middle">Visão geral</span>
+    <div className="min-h-screen bg-white font-sans text-ink md:grid md:grid-cols-[220px_1fr]">
+      <aside className="flex flex-wrap items-center gap-x-6 bg-ink px-5 py-3 text-[#9a9a9a] md:sticky md:top-0 md:h-screen md:flex-col md:flex-nowrap md:items-stretch md:py-6">
+        <b className="text-lg font-semibold text-white md:mb-6">TI Prefeitura</b>
+        <nav className="flex gap-5 md:flex-col md:gap-0" aria-label="Navegação principal">
+          <NavLink to="/" end className={link}>Visão geral</NavLink>
+          <NavLink to="/equipamentos" className={link}>Equipamentos</NavLink>
+          <NavLink to="/setores" className={link}>Setores</NavLink>
+        </nav>
+        <div className="ml-auto text-sm md:ml-0 md:mt-auto">
+          <p className="hidden text-white md:block">{s.user.name}</p>
+          <button onClick={logout} className="h-11 underline-offset-4 hover:text-white hover:underline">Sair</button>
+        </div>
       </aside>
-      <main className="px-9 py-8">
-        <h1 className="text-5xl font-medium leading-none tracking-tight">
-          Patrimônio de TI. <span className="text-muted">Esqueleto no ar.</span>
-        </h1>
-        <p className="mt-6 font-mono text-sm">API: {api}</p>
+      <main className="mx-auto w-full max-w-6xl px-4 py-8 md:px-9">
+        <Outlet />
       </main>
     </div>
   );
 }
 
-createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>);
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route element={<Layout />}>
+          <Route index element={<Overview />} />
+          <Route path="equipamentos" element={<EquipmentPage />} />
+          <Route path="setores" element={<SectorsPage />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
+  </StrictMode>,
+);

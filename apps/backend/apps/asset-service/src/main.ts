@@ -45,6 +45,8 @@ class SectorsController {
   async update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateSectorDto) {
     if (dto.parentId === id) throw new BadRequestException('Um setor não pode ser vinculado a ele mesmo.');
     await assertParentIsRoot(dto.parentId);
+    if (dto.parentId && (await db.sector.count({ where: { parentId: id } })))
+      throw new BadRequestException('Um setor principal com locais vinculados não pode virar local de outro.');
     return db.sector.update({ where: { id }, data: dto });
   }
 
