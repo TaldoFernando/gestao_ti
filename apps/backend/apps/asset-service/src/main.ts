@@ -7,7 +7,7 @@ export class AppModule {}
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  app.setGlobalPrefix('api', { exclude: ['health'] });
+  app.setGlobalPrefix('api');
   await app.listen(process.env.PORT ?? 3000);
 }
 if (require.main === module) bootstrap();
