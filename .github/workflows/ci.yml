@@ -26,10 +26,19 @@ jobs:
       - run: npm ci
       - run: npm run build
 
-  docker:
+  # Sobe o sistema inteiro e roda os testes de integração e resiliência contra ele.
+  integration:
     runs-on: ubuntu-latest
     needs: [backend, web]
     steps:
       - uses: actions/checkout@v4
       - run: cp .env.example .env
-      - run: docker compose build
+      - run: docker compose up -d --build --wait --wait-timeout 300
+      - run: ./scripts/smoke-tickets.sh
+      - run: ./scripts/smoke-scope.sh
+      - run: ./scripts/smoke-notify.sh
+      # Zera o limitador de login (memória do gateway) antes do teste que termina bloqueando o login.
+      - run: docker compose restart gateway && docker compose up -d --wait gateway
+      - run: ./scripts/smoke-assets.sh
+      - if: failure()
+        run: docker compose logs --tail 200

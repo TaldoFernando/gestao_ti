@@ -27,6 +27,7 @@ services:
     environment:
       TICKET_SERVICE_URL: http://ticket-service:3000
       ASSET_SERVICE_URL: http://asset-service:3000
+      RATE_LIMIT_OFF: ${RATE_LIMIT_OFF:-0}
     depends_on: [ticket-service, asset-service]
 
   ticket-service:

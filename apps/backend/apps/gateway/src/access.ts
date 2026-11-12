@@ -34,6 +34,8 @@ const LIMITS: [RegExp, number][] = [
 const hits = new Map<string, { count: number; resetAt: number }>();
 
 export function rateLimited(ip: string, method: string, path: string, now = Date.now()) {
+  // Só para o teste de carga medir a capacidade sem o limitador (ver docs/testes.md). Nunca em produção.
+  if (process.env.RATE_LIMIT_OFF === '1') return false;
   const key = `${method} ${path}`;
   const index = LIMITS.findIndex(([re]) => re.test(key));
   const bucket = `${ip}|${index}`;
