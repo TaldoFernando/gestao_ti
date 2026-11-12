@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Design E: fundo preto do menu, "TI" desenhado em blocos (não depende de fonte), marcador ouro da navegação -->
+  <rect width="32" height="32" rx="7" fill="#111111"/>
+  <path fill="#ffffff" d="M7 8h12v3.2h-4.4V24h-3.2V11.2H7zM21 8h3.2v16H21z"/>
+  <rect x="7" y="26" width="7" height="2" rx="1" fill="#e6b800"/>
+</svg>
