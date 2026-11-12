@@ -14,7 +14,8 @@ const log = new Logger('Outbox');
 
 /**
  * Lê o outbox a cada 2s, publica com confirmação do broker e só então marca como publicado.
- * Entrega pelo menos uma vez: se cair entre o confirm e o update, o e-mail pode sair repetido.
+ * Entrega pelo menos uma vez: se cair entre o confirm e o update, o evento sai de novo com o mesmo
+ * messageId (id da linha), e o notification-worker ignora o repetido (dedup.ts).
  * ponytail: um publisher por instância; com réplicas, trocar o findMany por SELECT ... FOR UPDATE SKIP LOCKED.
  */
 export function startOutboxPublisher(db: PrismaClient, url = process.env.RABBITMQ_URL ?? 'amqp://guest:guest@localhost:5672') {

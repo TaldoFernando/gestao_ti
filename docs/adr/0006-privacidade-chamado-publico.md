@@ -9,4 +9,4 @@
 - **Consequências:**
   - **+** Não dá para enumerar chamados, e a exposição de dados é mínima.
   - **−** O protocolo é maior que um número e precisa ser guardado pelo cidadão, que o recebe por e-mail.
-  - **−** A chance de colisão (cerca de 1 em 10¹²) não é tratada com nova tentativa (marcado no código).
+  - **+** A colisão (cerca de 1 em 10¹²) é tratada: o banco recusa o protocolo repetido (`@unique`, erro P2002) e a abertura tenta de novo com outro protocolo, até 5 vezes (`withUniqueProtocol` em `protocol.ts`).

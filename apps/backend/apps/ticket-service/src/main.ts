@@ -11,7 +11,7 @@ import { mkdirSync } from 'node:fs';
 import { extname, resolve } from 'node:path';
 import { HealthController } from '@app/common';
 import { Prisma, PrismaClient } from '.prisma/ticket';
-import { newProtocol } from './protocol';
+import { withUniqueProtocol } from './protocol';
 import { CreateEventDto, CreateTicketDto, UpdateTicketDto } from './dto';
 import { enqueue, startOutboxPublisher } from './outbox';
 
@@ -65,11 +65,12 @@ class TicketsController {
   @UseInterceptors(upload)
   async create(@Body() dto: CreateTicketDto, @UploadedFiles() files: Express.Multer.File[] = []) {
     const name = await sectorName(dto.sectorId);
-    const ticket = await db.$transaction(async (tx) => {
+    // Protocolo repetido (~1 em 10^12) → P2002 → nova transação com outro protocolo (ADR 0006).
+    const ticket = await withUniqueProtocol((protocol) => db.$transaction(async (tx) => {
       const t = await tx.ticket.create({
         data: {
           ...dto,
-          protocol: newProtocol(), // ponytail: colisão é ~1 em 10^12; tratar P2002 com retry se o volume crescer muito
+          protocol,
           sectorName: name,
           events: { create: { type: 'ABERTURA', message: 'Chamado aberto.' } },
           attachments: { create: files.map((f) => ({ filename: f.originalname, path: f.filename, mime: f.mimetype, size: f.size })) },
@@ -77,7 +78,7 @@ class TicketsController {
       });
       await enqueue(tx, { type: 'ticket.created', ...notifyFields(t) });
       return t;
-    });
+    }));
     return { protocol: ticket.protocol };
   }
 
