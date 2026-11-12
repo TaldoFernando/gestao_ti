@@ -10,6 +10,7 @@ type Detail = Row & {
   whatsapp: string;
   description: string;
   equipmentTag: string | null;
+  equipmentId: string | null;
   assigneeId: string | null;
   events: { id: string; type: string; message: string; public: boolean; authorName: string | null; createdAt: string }[];
   attachments: { id: string; filename: string; mime: string; size: number }[];
@@ -179,13 +180,23 @@ export function TicketDetail() {
               ['E-mail', t.email],
               ['WhatsApp', t.whatsapp],
               ['Setor', t.sectorName ?? '—'],
-              ['Patrimônio', t.equipmentTag ?? '—'],
             ].map(([k, v]) => (
               <div key={k}>
                 <dt className="text-muted">{k}</dt>
-                <dd className={k === 'Patrimônio' ? 'font-mono' : ''}>{v}</dd>
+                <dd>{v}</dd>
               </div>
             ))}
+            <div>
+              <dt className="text-muted">Patrimônio</dt>
+              <dd className="font-mono">
+                {/* Conferido no inventário → abre o histórico do equipamento. Sem id: texto digitado com o inventário fora do ar. */}
+                {t.equipmentId ? (
+                  <Link to={`/equipamentos?equipamento=${t.equipmentId}`} className="underline underline-offset-4 hover:text-muted">{t.equipmentTag}</Link>
+                ) : (
+                  <>{t.equipmentTag ?? '—'}{t.equipmentTag && <span className="block font-sans text-xs text-muted">não conferido no inventário</span>}</>
+                )}
+              </dd>
+            </div>
           </dl>
           {mineNow && <Button onClick={() => patch({ assignee: null })}>Devolver para a fila</Button>}
         </aside>

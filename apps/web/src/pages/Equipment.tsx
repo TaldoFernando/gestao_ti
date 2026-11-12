@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { useSearchParams } from 'react-router';
-import { api, session, sectorPath, type Equipment, type Movement, type Sector } from '../api';
-import { formatDate } from './tickets-shared';
+import { Link, useSearchParams } from 'react-router';
+import { api, apiPage, session, sectorPath, type Equipment, type Movement, type Sector } from '../api';
+import { STATUS, formatDate, type Status } from './tickets-shared';
 import { Button, Confirm, Dialog, ErrorText, Field, input, Pager, Pill, usePage, useInventory } from '../ui';
 
 export default function EquipmentPage() {
@@ -13,6 +13,20 @@ export default function EquipmentPage() {
   const [deleting, setDeleting] = useState<Equipment | null>(null);
   const [history, setHistory] = useState<Equipment | null>(null);
   const canEdit = session()?.user.role === 'TECNICO';
+
+  // Vindo do detalhe do chamado (?equipamento=<id>): abre o histórico desse equipamento.
+  const linked = params.get('equipamento');
+  useEffect(() => {
+    const e = linked && equipment.find((x) => x.id === linked);
+    if (e) setHistory(e);
+  }, [linked, equipment]);
+  const closeHistory = () => {
+    setHistory(null);
+    if (linked) {
+      params.delete('equipamento');
+      setParams(params, { replace: true });
+    }
+  };
 
   const sectorId = params.get('setor') ?? '';
   const inSector = (e: Equipment) =>
@@ -92,7 +106,7 @@ export default function EquipmentPage() {
       <Pager page={paged.page} pages={paged.pages} total={rows.length} onChange={paged.setPage} />
 
       <EquipmentForm sectors={sectors} types={types} value={editing} onClose={() => setEditing(null)} onSaved={reload} />
-      <History equipment={history} onClose={() => setHistory(null)} />
+      <History equipment={history} showTickets={canEdit} onClose={closeHistory} />
       <Confirm
         text={deleting && `O equipamento “${deleting.name}” será removido do cadastro.`}
         onClose={() => setDeleting(null)}
@@ -105,17 +119,42 @@ export default function EquipmentPage() {
   );
 }
 
-function History({ equipment, onClose }: { equipment: Equipment | null; onClose: () => void }) {
+type LinkedTicket = { id: string; protocol: string; title: string; status: Status; createdAt: string };
+
+function History({ equipment, showTickets, onClose }: { equipment: Equipment | null; showTickets: boolean; onClose: () => void }) {
   const [rows, setRows] = useState<Movement[] | null>(null);
+  const [tickets, setTickets] = useState<{ items: LinkedTicket[]; total: number } | null>(null);
   const [error, setError] = useState('');
   useEffect(() => {
     setRows(null);
+    setTickets(null);
     setError('');
-    if (equipment) api<Movement[]>(`/equipment/${equipment.id}/movements`).then(setRows).catch((e: Error) => setError(e.message));
-  }, [equipment]);
+    if (!equipment) return;
+    api<Movement[]>(`/equipment/${equipment.id}/movements`).then(setRows).catch((e: Error) => setError(e.message));
+    // Chamados são só da equipe de TI; o responsável do setor não tem acesso à fila.
+    if (showTickets) apiPage<LinkedTicket>(`/tickets?equipmentId=${equipment.id}&pageSize=10`).then(setTickets).catch(() => setTickets({ items: [], total: 0 }));
+  }, [equipment, showTickets]);
   return (
     <Dialog open={equipment !== null} onClose={onClose} title={equipment ? `Histórico · ${equipment.name}` : ''}>
       <ErrorText>{error}</ErrorText>
+      {showTickets && (
+        <section className="mb-6">
+          <h3 className="mb-2 text-sm font-medium">Chamados{tickets && tickets.total > 0 ? ` (${tickets.total})` : ''}</h3>
+          {tickets && !tickets.items.length && <p className="text-muted">Nenhum chamado ligado a este equipamento.</p>}
+          <ul className="border-t border-line">
+            {tickets?.items.map((t) => (
+              <li key={t.id} className="border-b border-line">
+                <Link to={`/chamados/${t.id}`} className="grid gap-0.5 py-2.5 hover:bg-[#fafafa]">
+                  <span className="font-mono text-[13px] text-muted">{t.protocol} · {STATUS[t.status]}</span>
+                  <span>{t.title} <span className="text-sm text-muted">· {formatDate(t.createdAt)}</span></span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+          {tickets && tickets.total > tickets.items.length && <p className="mt-2 text-sm text-muted">Mostrando os {tickets.items.length} primeiros.</p>}
+        </section>
+      )}
+      <h3 className="mb-2 text-sm font-medium">Movimentações</h3>
       {rows && !rows.length && <p className="text-muted">Sem movimentações registradas.</p>}
       <ol className="border-l border-line">
         {rows?.map((m) => (

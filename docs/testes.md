@@ -26,7 +26,7 @@ Resiliência em detalhe:
 |---|---|---|
 | RabbitMQ parado | chamado abre (201), nenhum e-mail sai; quando o broker volta, o e-mail sai | ✔ outbox reenviou sozinho |
 | SMTP parado | 3 tentativas com 10 s de espera, depois `notifications.dlq` | ✔ mensagem na DLQ com `x-last-error` |
-| asset-service parado | chamado abre sem o nome do setor; gateway responde 503 no inventário e não cai | ✔ e volta sozinho com `restart: unless-stopped` |
+| asset-service parado | chamado abre sem o nome do setor e com o patrimônio só como texto (sem vínculo); gateway responde 503 no inventário e não cai | ✔ e volta sozinho com `restart: unless-stopped` |
 
 ### Carga (k6, 60 s, 3 cenários em paralelo)
 
