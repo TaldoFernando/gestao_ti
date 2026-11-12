@@ -4,18 +4,18 @@ import {
 } from '@nestjs/common';
 import { BaseExceptionFilter, NestFactory } from '@nestjs/core';
 import { HealthController } from '@app/common';
-import { Prisma, PrismaClient } from '.prisma/asset';
+import { Prisma } from '.prisma/asset';
+import { db } from './db';
+import { UsersController } from './users';
 import { CreateEquipmentDto, CreateSectorDto, UpdateEquipmentDto, UpdateSectorDto } from './dto';
 import { seed } from './seed';
-
-const db = new PrismaClient();
 
 // Converte erros de constraint do Postgres em respostas HTTP; a regra de negócio vive no schema.
 @Catch(Prisma.PrismaClientKnownRequestError)
 class PrismaErrorFilter extends BaseExceptionFilter implements ExceptionFilter {
   catch(e: Prisma.PrismaClientKnownRequestError, host: ArgumentsHost) {
     const map: Record<string, Error> = {
-      P2002: new ConflictException('Número de patrimônio já cadastrado.'),
+      P2002: new ConflictException('Registro duplicado (patrimônio ou e-mail já cadastrado).'),
       P2003: new ConflictException('Remova ou transfira os locais vinculados antes de excluir este setor.'),
       P2025: new NotFoundException('Registro não encontrado.'),
     };
@@ -103,7 +103,7 @@ async function assertParentIsRoot(parentId?: string | null) {
   if (parent.parentId) throw new BadRequestException('Locais só podem ser vinculados a um setor principal.');
 }
 
-@Module({ controllers: [HealthController, SectorsController, EquipmentController] })
+@Module({ controllers: [HealthController, SectorsController, EquipmentController, UsersController] })
 export class AppModule {}
 
 export async function createApp() {

@@ -1,8 +1,17 @@
 import { PrismaClient } from '.prisma/asset';
+import { hashPassword } from './users';
 
 // Dados de exemplo do protótipo (app.js). Só roda com o banco vazio.
 // ponytail: seed no boot, trocar por `prisma db seed` se a carga crescer.
 export async function seed(db: PrismaClient) {
+  // Primeiro técnico, para conseguir entrar no sistema. Credenciais vêm do .env.
+  const { ADMIN_EMAIL, ADMIN_PASSWORD } = process.env;
+  if (ADMIN_EMAIL && ADMIN_PASSWORD && !(await db.user.count())) {
+    await db.user.create({
+      data: { name: 'Administrador', email: ADMIN_EMAIL.toLowerCase(), role: 'TECNICO', passwordHash: hashPassword(ADMIN_PASSWORD) },
+    });
+  }
+
   if (await db.sector.count()) return;
 
   const educacao = await db.sector.create({ data: { name: 'Secretaria Municipal de Educação', type: 'Secretaria' } });

@@ -25,6 +25,7 @@ model Sector {
   parent      Sector?     @relation("SectorTree", fields: [parentId], references: [id], onDelete: Restrict)
   children    Sector[]    @relation("SectorTree")
   equipment   Equipment[]
+  users       User[]
   createdAt   DateTime    @default(now())
 }
 
@@ -39,4 +40,22 @@ model Equipment {
   // SetNull: equipamento de setor excluído fica "sem local definido".
   sector    Sector?   @relation(fields: [sectorId], references: [id], onDelete: SetNull)
   createdAt DateTime  @default(now())
+}
+
+enum Role {
+  TECNICO
+  RESPONSAVEL
+}
+
+// Fica no asset-service para não criar um serviço só de auth (ver plano, seção 5).
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role
+  // Responsável enxerga só o próprio setor (etapa 7).
+  sectorId     String?
+  sector       Sector?  @relation(fields: [sectorId], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
 }
