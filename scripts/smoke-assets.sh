@@ -25,17 +25,25 @@ expect "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TR" 
 expect "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TR" -X POST $B/equipment -H "$JSON" -d '{"name":"X","type":"Y"}')" 403 "responsável não cadastra"
 
 # --- Regras do inventário
-SAUDE=$(c $B/sectors | j "o.find(x=>x.name.includes('Saúde')).id")
-ADM=$(c $B/sectors | j "o.find(x=>x.name.includes('Administração')).id")
-expect "$(c "$B/equipment?sectorId=$SAUDE" | j "o.length")" 1 "filtro por setor inclui locais vinculados"
-expect "$(code -X DELETE $B/sectors/$SAUDE)" 409 "setor com locais não pode ser excluído"
-expect "$(code -X POST $B/equipment -H "$JSON" -d '{"name":"X","type":"Monitor","assetTag":"PAT-00125"}')" 409 "patrimônio duplicado"
+# Cria os próprios setores e equipamentos: não depende dos dados de exemplo, que podem ter sido alterados.
+ROOT=$(c -X POST $B/sectors -H "$JSON" -d '{"name":"Smoke principal","type":"Secretaria"}' | j "o.id")
+ADM=$ROOT
+CHILD=$(c -X POST $B/sectors -H "$JSON" -d "{\"name\":\"Smoke filho\",\"type\":\"Escola\",\"parentId\":\"$ROOT\"}" | j "o.id")
+IN_CHILD=$(c -X POST $B/equipment -H "$JSON" -d "{\"name\":\"Smoke no filho\",\"type\":\"Monitor\",\"sectorId\":\"$CHILD\"}" | j "o.id")
+expect "$(c "$B/equipment?sectorId=$ROOT" | j "o.length")" 1 "filtro por setor inclui locais vinculados"
+expect "$(code -X DELETE $B/sectors/$ROOT)" 409 "setor com locais não pode ser excluído"
+c -o /dev/null -X DELETE $B/equipment/$IN_CHILD
+TAG="PAT-SMOKE-$RANDOM"
+DUP=$(c -X POST $B/equipment -H "$JSON" -d "{\"name\":\"Smoke original\",\"type\":\"Monitor\",\"assetTag\":\"$TAG\"}" | j "o.id")
+expect "$(code -X POST $B/equipment -H "$JSON" -d "{\"name\":\"Smoke copia\",\"type\":\"Monitor\",\"assetTag\":\"$TAG\"}")" 409 "patrimônio duplicado"
+c -o /dev/null -X DELETE $B/equipment/$DUP
 expect "$(code -X POST $B/equipment -H "$JSON" -d '{"name":"","type":"Monitor"}')" 400 "validação de entrada"
 LOC=$(c -X POST $B/sectors -H "$JSON" -d "{\"name\":\"Smoke\",\"type\":\"Departamento\",\"parentId\":\"$ADM\"}" | j "o.id")
 EQ=$(c -X POST $B/equipment -H "$JSON" -d "{\"name\":\"Smoke\",\"type\":\"Monitor\",\"sectorId\":\"$LOC\"}" | j "o.id")
 expect "$(code -X DELETE $B/sectors/$LOC)" 204 "excluir local"
 expect "$(c $B/equipment/$EQ | j "o.sectorId")" null "equipamento fica sem setor"
 expect "$(code -X DELETE $B/equipment/$EQ)" 204 "excluir equipamento"
+c -o /dev/null -X DELETE $B/sectors/$CHILD; c -o /dev/null -X DELETE $B/sectors/$ROOT
 
 # --- Rate limit (por último: bloqueia o login deste IP por 1 minuto)
 for i in 1 2 3 4 5 6; do last=$(curl -s -o /dev/null -w '%{http_code}' -X POST $B/auth/login -H "$JSON" -d '{"email":"x@x.com","password":"x"}'); done

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Escopo do responsável do setor e histórico de movimentações. Uso: docker compose up -d && ./scripts/smoke-scope.sh
+# Cria e apaga os próprios setores e equipamentos: não depende dos dados de exemplo.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 set -a; . ./.env; set +a
@@ -11,31 +12,36 @@ login() { curl -s -X POST $B/auth/login -H "$JSON" -d "{\"email\":\"$1\",\"passw
 
 T=$(login "$ADMIN_EMAIL" "$ADMIN_PASSWORD")
 c() { curl -s -H "Authorization: Bearer $T" "$@"; }
-EDU=$(c $B/sectors | j "o.find(x=>x.name.includes('Educação')).id")
-ESCOLA=$(c $B/sectors | j "o.find(x=>x.name==='Escola Municipal Central').id")
-ADM=$(c $B/sectors | j "o.find(x=>x.name.includes('Administração')).id")
-IMPRESSORA=$(c "$B/equipment?q=LaserJet" | j "o[0].id")
+new_sector() { c -X POST $B/sectors -H "$JSON" -d "$1" | j "o.id"; }
+new_equipment() { c -X POST $B/equipment -H "$JSON" -d "{\"name\":\"$1\",\"type\":\"Monitor\",\"sectorId\":\"$2\"}" | j "o.id"; }
 
-# Responsável da Secretaria de Educação (setor principal: vê também a escola vinculada)
-EMAIL="edu.$RANDOM@prefeitura.example"
+R=$RANDOM
+EDU=$(new_sector "{\"name\":\"Smoke Educacao $R\",\"type\":\"Secretaria\"}")
+ESCOLA=$(new_sector "{\"name\":\"Smoke Escola $R\",\"type\":\"Escola\",\"parentId\":\"$EDU\"}")
+SAUDE=$(new_sector "{\"name\":\"Smoke Saude $R\",\"type\":\"Secretaria\"}")
+E1=$(new_equipment "Smoke na secretaria" $EDU)
+E2=$(new_equipment "Smoke na escola" $ESCOLA)
+ALHEIO=$(new_equipment "Smoke na saude" $SAUDE)
+cleanup() { for id in $E1 $E2 $ALHEIO ${MOVED:-}; do c -o /dev/null -X DELETE $B/equipment/$id; done; for id in $ESCOLA $EDU $SAUDE; do c -o /dev/null -X DELETE $B/sectors/$id; done; }
+trap cleanup EXIT
+
+# Responsável da secretaria (setor principal: vê também a escola vinculada)
+EMAIL="edu.$R@prefeitura.example"
 c -o /dev/null -X POST $B/users -H "$JSON" -d "{\"name\":\"Resp Edu\",\"email\":\"$EMAIL\",\"password\":\"senha-forte-1\",\"role\":\"RESPONSAVEL\",\"sectorId\":\"$EDU\"}"
 TR=$(login "$EMAIL" senha-forte-1)
 r() { curl -s -H "Authorization: Bearer $TR" "$@"; }
-VISIVEIS=$(r $B/equipment | j "o.length"); TOTAL=$(c $B/equipment | j "o.length")
-[ "$VISIVEIS" -lt "$TOTAL" ] && echo "ok   responsável vê $VISIVEIS de $TOTAL equipamentos"
-expect "$(r $B/equipment | j "o.every(e=>['$EDU','$ESCOLA'].includes(e.sectorId))")" true "só equipamentos da Educação e locais vinculados"
-expect "$(r -o /dev/null -w '%{http_code}' $B/equipment/$IMPRESSORA)" 404 "equipamento de outro setor não abre por id"
-expect "$(r -o /dev/null -w '%{http_code}' $B/equipment/$IMPRESSORA/movements)" 404 "nem o histórico dele"
-expect "$(r -o /dev/null -w '%{http_code}' "$B/equipment?sectorId=$(c $B/sectors | j "o.find(x=>x.name==='UBS Central').id")")" 200 "filtrar por setor alheio não vaza nada..."
-expect "$(r "$B/equipment?sectorId=$(c $B/sectors | j "o.find(x=>x.name==='UBS Central').id")" | j "o.length")" 0 "...retorna lista vazia"
+expect "$(r $B/equipment | j "o.map(e=>e.id).sort().join()")" "$(printf '%s\n' $E1 $E2 | sort | paste -sd,)" "responsável vê exatamente a secretaria e a escola vinculada"
+expect "$(r -o /dev/null -w '%{http_code}' $B/equipment/$ALHEIO)" 404 "equipamento de outro setor não abre por id"
+expect "$(r -o /dev/null -w '%{http_code}' $B/equipment/$ALHEIO/movements)" 404 "nem o histórico dele"
+expect "$(r -o /dev/null -w '%{http_code}' "$B/equipment?sectorId=$SAUDE")" 200 "filtrar por setor alheio não vaza nada..."
+expect "$(r "$B/equipment?sectorId=$SAUDE" | j "o.length")" 0 "...retorna lista vazia"
 
-# Movimentação: mover registra origem, destino e autor; mover de volta registra de novo
-ID=$(c -X POST $B/equipment -H "$JSON" -d "{\"name\":\"Monitor movido\",\"type\":\"Monitor\",\"sectorId\":\"$ESCOLA\"}" | j "o.id")
-c -o /dev/null -X PATCH $B/equipment/$ID -H "$JSON" -d "{\"sectorId\":\"$ADM\"}"
-c -o /dev/null -X PATCH $B/equipment/$ID -H "$JSON" -d '{"name":"Monitor movido (renomeado)"}'
-M=$(c $B/equipment/$ID/movements)
+# Movimentação: mover registra origem, destino e autor; renomear não registra
+MOVED=$(new_equipment "Smoke movido" $ESCOLA)
+c -o /dev/null -X PATCH $B/equipment/$MOVED -H "$JSON" -d "{\"sectorId\":\"$SAUDE\"}"
+c -o /dev/null -X PATCH $B/equipment/$MOVED -H "$JSON" -d '{"name":"Smoke movido (renomeado)"}'
+M=$(c $B/equipment/$MOVED/movements)
 expect "$(echo "$M" | j "o.length")" 2 "cadastro + 1 mudança de local (renomear não conta)"
-expect "$(echo "$M" | j "o[0].fromName+' -> '+o[0].toName")" "Secretaria Municipal de Educação › Escola Municipal Central -> Secretaria de Administração" "origem e destino com caminho completo"
+expect "$(echo "$M" | j "o[0].fromName+' -> '+o[0].toName")" "Smoke Educacao $R › Smoke Escola $R -> Smoke Saude $R" "origem e destino com caminho completo"
 expect "$(echo "$M" | j "o[0].byName")" Administrador "autor registrado"
-expect "$(r -o /dev/null -w '%{http_code}' $B/equipment/$ID)" 404 "saiu do setor do responsável → some para ele"
-c -o /dev/null -X DELETE $B/equipment/$ID
+expect "$(r -o /dev/null -w '%{http_code}' $B/equipment/$MOVED)" 404 "saiu do setor do responsável → some para ele"

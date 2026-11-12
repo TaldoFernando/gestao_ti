@@ -11,7 +11,8 @@ TMP=$(mktemp -d ./.smoke-XXXX); trap 'rm -r "$TMP"' EXIT
 printf '\x89PNG\r\n\x1a\n' > "$TMP/foto.png"; printf 'MZ' > "$TMP/virus.exe"
 
 # --- Cidadão (sem login)
-SECTOR=$(curl -s $B/sectors | j "o.find(x=>x.name==='UBS Central').id")
+SECTOR_JSON=$(curl -s $B/sectors | j "JSON.stringify(o.find(x=>x.parentId) ?? o[0])")
+SECTOR=$(echo "$SECTOR_JSON" | j "o.id"); SECTOR_NAME=$(echo "$SECTOR_JSON" | j "o.name")
 [ -n "$SECTOR" ] && echo "ok   formulário público lista setores"
 P=$(curl -s -X POST $B/tickets -F requesterName=Maria -F email=maria@exemplo.com -F whatsapp=83999990000 \
   -F sectorId=$SECTOR -F equipmentTag=PAT-00201 -F title=Impressora-nao-liga -F description=Desde-ontem -F files=@"$TMP/foto.png;type=image/png" | j "o.protocol")
@@ -19,7 +20,7 @@ P=$(curl -s -X POST $B/tickets -F requesterName=Maria -F email=maria@exemplo.com
 expect "$(curl -s -o /dev/null -w '%{http_code}' -X POST $B/tickets -F requesterName=X -F email=ruim -F whatsapp=1 -F title=T -F description=D)" 400 "validação do formulário"
 expect "$(curl -s -o /dev/null -w '%{http_code}' -X POST $B/tickets -F requesterName=X -F email=a@b.com -F whatsapp='83999990000' -F title=T -F description=D -F files=@"$TMP/virus.exe;type=application/x-msdownload")" 400 "anexo de tipo proibido"
 PUB=$(curl -s $B/tickets/protocol/${P,,})
-expect "$(echo "$PUB" | j "o.status+'|'+o.sectorName")" "ABERTO|UBS Central" "acompanhamento pelo protocolo (minúsculas aceitas)"
+expect "$(echo "$PUB" | j "o.status+'|'+o.sectorName")" "ABERTO|$SECTOR_NAME" "acompanhamento pelo protocolo (minúsculas aceitas)"
 expect "$(echo "$PUB" | j "'email' in o || 'whatsapp' in o")" false "consulta pública não expõe dados pessoais"
 expect "$(curl -s -o /dev/null -w '%{http_code}' $B/tickets)" 401 "fila exige login"
 

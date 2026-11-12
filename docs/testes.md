@@ -5,9 +5,9 @@ Cada decisão de arquitetura tem um teste que falha se ela quebrar. Todos rodam 
 | Tipo | Onde | O que valida | ADR |
 |---|---|---|---|
 | Unitário | `apps/backend/**/*.spec.ts` (Jest) | regras de acesso por perfil, rate limit, formato e unicidade do protocolo, templates de e-mail | 0003, 0006 |
-| Integração | `scripts/smoke-assets.sh` | CRUD do inventário via gateway, regras no banco (RESTRICT / SET NULL), validação, login, JWT, cabeçalho forjado, perfil responsável, bloqueio de login | 0002, 0003 |
+| Integração | `scripts/smoke-assets.sh` | (cria e apaga os próprios dados) CRUD do inventário via gateway, regras no banco (RESTRICT / SET NULL), validação, login, JWT, cabeçalho forjado, perfil responsável, bloqueio de login | 0002, 0003 |
 | Integração | `scripts/smoke-tickets.sh` | abertura pública com anexo, tipo de arquivo proibido, consulta pública sem dados pessoais, fila do técnico, assumir/status/resposta, nota interna invisível, anexo só com login | 0006 |
-| Integração | `scripts/smoke-scope.sh` | escopo do responsável (lista, detalhe, histórico, filtro por setor alheio), registro de movimentações | 0007 |
+| Integração | `scripts/smoke-scope.sh` | (cria e apaga os próprios dados) escopo do responsável (lista, detalhe, histórico, filtro por setor alheio), registro de movimentações | 0007 |
 | Resiliência | `scripts/smoke-notify.sh` | RabbitMQ parado, SMTP parado (retry → DLQ), inventário parado | 0001, 0004 |
 | Carga | `load/k6.js` (k6 em container) | capacidade com 70 usuários virtuais e comportamento do rate limit | 0003 |
 
@@ -17,7 +17,7 @@ Cada decisão de arquitetura tem um teste que falha se ela quebrar. Todos rodam 
 
 ```
 smoke-assets   14/14 ok      smoke-tickets  13/13 ok
-smoke-scope    10/10 ok      smoke-notify    9/9  ok      jest 8/8 ok
+smoke-scope     9/9  ok      smoke-notify    9/9  ok      jest 8/8 ok
 ```
 
 Resiliência em detalhe:

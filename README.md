@@ -129,7 +129,7 @@ docs/testes.md         plano e resultados de testes
 
 ## Testes
 
-Plano completo e resultados medidos em **[docs/testes.md](docs/testes.md)**. Resumo: 8 testes unitários, 46 verificações de integração e resiliência (também no CI) e teste de carga com **1.530 req/s, 0% de falhas e p95 abaixo de 60 ms**. A primeira rodada de carga revelou o esgotamento de portas no nginx (61% de 502), corrigido com keepalive.
+Plano completo e resultados medidos em **[docs/testes.md](docs/testes.md)**. Resumo: 8 testes unitários, 45 verificações de integração e resiliência (também no CI) e teste de carga com **1.530 req/s, 0% de falhas e p95 abaixo de 60 ms**. A primeira rodada de carga revelou o esgotamento de portas no nginx (61% de 502), corrigido com keepalive.
 
 CI (GitHub Actions): checagem de tipos, testes unitários e build do back e do front; depois sobe o Compose inteiro e roda os scripts de integração e resiliência.
 
