@@ -11,6 +11,7 @@ const PUBLIC: [string, RegExp][] = [
 
 // Responsável do setor só consulta inventário (escopo por setor na etapa 7).
 const RESPONSAVEL_READS = /^\/api\/(sectors|equipment)(\/|$)/;
+const SELF_PROFILE = /^\/api\/users\/me$/;
 
 export function isPublic(method: string, path: string) {
   return PUBLIC.some(([m, re]) => m === method && re.test(path));
@@ -21,7 +22,7 @@ export function authorize(method: string, path: string, user: User | null): 401 
   if (isPublic(method, path)) return null;
   if (!user) return 401;
   if (user.role === 'TECNICO') return null;
-  return method === 'GET' && RESPONSAVEL_READS.test(path) ? null : 403;
+  return (method === 'GET' && RESPONSAVEL_READS.test(path)) || SELF_PROFILE.test(path) && ['GET', 'PATCH'].includes(method) ? null : 403;
 }
 
 // Janela fixa por IP e grupo de rota.

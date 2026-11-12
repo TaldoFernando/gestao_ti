@@ -5,6 +5,11 @@ import { Button, ErrorText, input, PAGE_SIZE, Pager, Pill } from '../ui';
 import { PRIORITY, STATUS, formatDate, type Priority, type Status } from './tickets-shared';
 
 type Row = { id: string; protocol: string; title: string; status: Status; priority: Priority; requesterName: string; sectorName: string | null; assigneeName: string | null; createdAt: string };
+const PRIORITY_STYLE: Record<Priority, string> = {
+  ALTA: 'bg-[#fce8e6] text-[#a12622]',
+  MEDIA: 'bg-[#fff1cc] text-[#805b00]',
+  BAIXA: 'bg-[#e8eef8] text-[#31527a]',
+};
 type Detail = Row & {
   email: string;
   whatsapp: string;
@@ -46,7 +51,7 @@ export function TicketList() {
     <>
       <div className="border-b border-ink pb-6">
         <h1 className="text-4xl font-medium tracking-tight">Chamados</h1>
-        <p className="mt-1 text-muted">Prioridade alta primeiro, depois os mais antigos.</p>
+        <p className="mt-1 text-muted">Prioridade alta primeiro; em cada prioridade, os chamados mais antigos aparecem antes.</p>
       </div>
       <div className="mt-6 flex flex-wrap gap-2" role="group" aria-label="Filtrar por status">
         {(Object.keys(STATUS) as Status[]).map((s) => <Pill key={s} active={status === s} onClick={() => setStatus(s)}>{STATUS[s]}</Pill>)}
@@ -67,7 +72,9 @@ export function TicketList() {
                 <span className="block truncate text-sm text-muted">{t.requesterName}{t.sectorName ? ` · ${t.sectorName}` : ''} · {formatDate(t.createdAt)}</span>
               </span>
               <span className="flex items-center gap-2 text-sm md:justify-end">
-                {t.priority === 'ALTA' && <span className="rounded-full bg-gold px-2.5 py-0.5 font-medium">Alta</span>}
+                <span className={`rounded-full px-2.5 py-0.5 font-medium ${PRIORITY_STYLE[t.priority]}`}>
+                  {PRIORITY[t.priority]}
+                </span>
                 <span className="text-muted">{t.assigneeName ?? 'Sem responsável'}</span>
               </span>
             </Link>
