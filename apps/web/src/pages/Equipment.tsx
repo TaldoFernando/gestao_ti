@@ -8,7 +8,7 @@ export default function EquipmentPage() {
   const { sectors, equipment, error, loading, reload } = useInventory();
   const [params, setParams] = useSearchParams();
   const [search, setSearch] = useState('');
-  const [type, setType] = useState('');
+  const [type, setType] = useState(params.get('tipo') ?? ''); // vem do gráfico da visão geral
   const [editing, setEditing] = useState<Equipment | 'new' | null>(null);
   const [deleting, setDeleting] = useState<Equipment | null>(null);
   const [history, setHistory] = useState<Equipment | null>(null);

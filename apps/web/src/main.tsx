@@ -21,7 +21,7 @@ function Layout() {
     <div className="min-h-screen bg-white font-sans text-ink md:grid md:grid-cols-[220px_1fr] print:block">
       <aside className="flex flex-wrap print:hidden items-center gap-x-6 bg-ink px-5 py-3 text-[#9a9a9a] md:sticky md:top-0 md:h-screen md:flex-col md:flex-nowrap md:items-stretch md:py-6">
         <b className="text-lg font-semibold text-white md:mb-6">TI Prefeitura</b>
-        <nav className="flex gap-5 md:flex-col md:gap-0" aria-label="Navegação principal">
+        <nav className="-mx-1 flex max-w-full gap-5 overflow-x-auto whitespace-nowrap px-1 md:mx-0 md:flex-col md:gap-0 md:overflow-visible md:px-0" aria-label="Navegação principal">
           <NavLink to="/" end className={link}>Visão geral</NavLink>
           {s.user.role === 'TECNICO' && <NavLink to="/chamados" className={link}>Chamados</NavLink>}
           <NavLink to="/equipamentos" className={link}>Equipamentos</NavLink>
