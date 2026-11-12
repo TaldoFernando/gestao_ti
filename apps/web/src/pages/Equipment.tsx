@@ -25,7 +25,7 @@ export default function EquipmentPage() {
       [e.name, e.type, e.assetTag, e.serial, sectorPath(sectors, e.sectorId)].join(' ').toLocaleLowerCase('pt-BR').includes(q),
   );
   const types = [...new Set(equipment.map((e) => e.type))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
-  const paged = usePage(rows, 20, `${q}|${type}|${sectorId}`);
+  const paged = usePage(rows, `${q}|${type}|${sectorId}`);
 
   return (
     <>

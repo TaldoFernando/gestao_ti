@@ -107,7 +107,7 @@ class TicketsController {
     @Query('pageSize') sizeParam?: string,
   ) {
     const page = Math.max(1, Number(pageParam) || 1);
-    const pageSize = Math.min(100, Math.max(1, Number(sizeParam) || 20));
+    const pageSize = Math.min(10, Math.max(1, Number(sizeParam) || 10)); // máximo 10 por página
     const where: Prisma.TicketWhereInput = {};
     if (status) where.status = status as never;
     if (mine) where.assigneeId = me(h).id;

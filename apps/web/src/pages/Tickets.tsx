@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router';
 import { api, apiPage, session } from '../api';
-import { Button, ErrorText, input, Pager, Pill } from '../ui';
+import { Button, ErrorText, input, PAGE_SIZE, Pager, Pill } from '../ui';
 import { PRIORITY, STATUS, formatDate, type Priority, type Status } from './tickets-shared';
 
 type Row = { id: string; protocol: string; title: string; status: Status; priority: Priority; requesterName: string; sectorName: string | null; assigneeName: string | null; createdAt: string };
@@ -23,7 +23,6 @@ export function TicketList() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [error, setError] = useState('');
-  const PAGE_SIZE = 20;
 
   // Filtro novo volta para a primeira página.
   useEffect(() => setPage(1), [status, mine, q]);

@@ -15,7 +15,7 @@ export default function Users() {
   const rows = users.filter(
     (u) => (!role || u.role === role) && [u.name, u.email, sectorPath(sectors, u.sectorId)].join(' ').toLocaleLowerCase('pt-BR').includes(q),
   );
-  const paged = usePage(rows, 20, `${q}|${role}`);
+  const paged = usePage(rows, `${q}|${role}`);
   const load = () => api<AppUser[]>('/users').then(setUsers).catch((e: Error) => setError(e.message));
   useEffect(() => {
     load();

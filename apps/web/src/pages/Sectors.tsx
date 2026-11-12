@@ -24,7 +24,7 @@ export default function SectorsPage() {
       return { root, children: matches(root) ? all : all.filter(matches) };
     })
     .filter((g) => matches(g.root) || g.children.length);
-  const paged = usePage(groups, 8, q);
+  const paged = usePage(groups, q);
 
   return (
     <>

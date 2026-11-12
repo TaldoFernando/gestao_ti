@@ -39,7 +39,10 @@ export function useInventory() {
  * Volta para a página 1 quando `resetKey` muda (filtro novo). Se a lista encolher, não fica numa página vazia.
  * ponytail: tudo vem do servidor de uma vez; paginar na API como em /tickets se passar de alguns milhares.
  */
-export function usePage<T>(items: T[], size: number, resetKey: unknown) {
+/** Máximo de itens por página em todas as listas. */
+export const PAGE_SIZE = 10;
+
+export function usePage<T>(items: T[], resetKey: unknown, size = PAGE_SIZE) {
   const [page, setPage] = useState(1);
   useEffect(() => setPage(1), [resetKey]);
   const pages = Math.max(1, Math.ceil(items.length / size));
