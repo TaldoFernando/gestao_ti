@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router';
-import { api, session } from '../api';
-import { Button, ErrorText, input, Pill } from '../ui';
+import { api, apiPage, session } from '../api';
+import { Button, ErrorText, input, Pager, Pill } from '../ui';
 import { PRIORITY, STATUS, formatDate, type Priority, type Status } from './tickets-shared';
 
 type Row = { id: string; protocol: string; title: string; status: Status; priority: Priority; requesterName: string; sectorName: string | null; assigneeName: string | null; createdAt: string };
@@ -20,13 +20,28 @@ export function TicketList() {
   const [mine, setMine] = useState(false);
   const [q, setQ] = useState('');
   const [rows, setRows] = useState<Row[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [error, setError] = useState('');
+  const PAGE_SIZE = 20;
+
+  // Filtro novo volta para a primeira página.
+  useEffect(() => setPage(1), [status, mine, q]);
 
   useEffect(() => {
-    const params = new URLSearchParams({ ...(status && { status }), ...(mine && { mine: '1' }), ...(q && { q }) });
-    const t = setTimeout(() => api<Row[]>(`/tickets?${params}`).then(setRows).catch((e: Error) => setError(e.message)), q ? 250 : 0);
+    const params = new URLSearchParams({ ...(status && { status }), ...(mine && { mine: '1' }), ...(q && { q }), page: String(page), pageSize: String(PAGE_SIZE) });
+    const t = setTimeout(
+      () =>
+        apiPage<Row>(`/tickets?${params}`)
+          .then(({ items, total }) => {
+            setRows(items);
+            setTotal(total);
+          })
+          .catch((e: Error) => setError(e.message)),
+      q ? 250 : 0,
+    );
     return () => clearTimeout(t);
-  }, [status, mine, q]);
+  }, [status, mine, q, page]);
 
   return (
     <>
@@ -61,6 +76,7 @@ export function TicketList() {
         ))}
       </ul>
       {rows && !rows.length && <p className="py-12 text-center text-muted">Nenhum chamado nesta fila.</p>}
+      <Pager page={page} pages={Math.max(1, Math.ceil(total / PAGE_SIZE))} total={total} onChange={setPage} />
     </>
   );
 }

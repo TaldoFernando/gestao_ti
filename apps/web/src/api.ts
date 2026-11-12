@@ -40,6 +40,16 @@ export class ApiError extends Error {
 }
 
 export async function api<T>(path: string, init: RequestInit & { json?: unknown } = {}): Promise<T> {
+  return (await send<T>(path, init)).body;
+}
+
+/** Lista paginada no servidor: o total vem no cabeçalho X-Total-Count. */
+export async function apiPage<T>(path: string): Promise<{ items: T[]; total: number }> {
+  const { body, res } = await send<T[]>(path);
+  return { items: body, total: Number(res.headers.get('x-total-count') ?? body.length) };
+}
+
+async function send<T>(path: string, init: RequestInit & { json?: unknown } = {}): Promise<{ body: T; res: Response }> {
   const { json, ...rest } = init;
   const headers = new Headers(rest.headers);
   const token = session()?.token;
@@ -47,13 +57,13 @@ export async function api<T>(path: string, init: RequestInit & { json?: unknown 
   if (json !== undefined) headers.set('content-type', 'application/json');
   const res = await fetch(`/api${path}`, { ...rest, headers, body: json !== undefined ? JSON.stringify(json) : rest.body });
   if (res.status === 401 && token) logout();
-  if (res.status === 204) return undefined as T;
+  if (res.status === 204) return { body: undefined as T, res };
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
     const msg = Array.isArray(body.message) ? body.message.join(' ') : body.message;
     throw new ApiError(res.status, msg ?? 'Algo deu errado. Tente de novo.');
   }
-  return body;
+  return { body, res };
 }
 
 export async function login(email: string, password: string) {

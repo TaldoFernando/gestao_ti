@@ -34,6 +34,39 @@ export function useInventory() {
   return { sectors, equipment, error, loading, reload };
 }
 
+/**
+ * Paginação na tela, para listas que já chegam inteiras (inventário, setores, usuários).
+ * Volta para a página 1 quando `resetKey` muda (filtro novo). Se a lista encolher, não fica numa página vazia.
+ * ponytail: tudo vem do servidor de uma vez; paginar na API como em /tickets se passar de alguns milhares.
+ */
+export function usePage<T>(items: T[], size: number, resetKey: unknown) {
+  const [page, setPage] = useState(1);
+  useEffect(() => setPage(1), [resetKey]);
+  const pages = Math.max(1, Math.ceil(items.length / size));
+  const current = Math.min(page, pages);
+  return { pageItems: items.slice((current - 1) * size, current * size), page: current, pages, setPage };
+}
+
+/** Controles de página. Some quando tudo cabe numa página. */
+export function Pager({ page, pages, total, onChange }: { page: number; pages: number; total: number; onChange: (p: number) => void }) {
+  if (pages <= 1) return null;
+  const go = (p: number) => {
+    onChange(p);
+    window.scrollTo({ top: 0 });
+  };
+  return (
+    <nav aria-label="Paginação" className="mt-6 flex flex-wrap items-center justify-between gap-3">
+      <p className="text-sm text-muted">
+        Página <span className="font-mono text-ink">{page}</span> de <span className="font-mono text-ink">{pages}</span> · <span className="font-mono">{total}</span> no total
+      </p>
+      <div className="flex gap-2">
+        <Button disabled={page <= 1} onClick={() => go(page - 1)}>← Anterior</Button>
+        <Button disabled={page >= pages} onClick={() => go(page + 1)}>Próxima →</Button>
+      </div>
+    </nav>
+  );
+}
+
 /** <dialog> nativo: foco, Esc e backdrop de graça. */
 export function Dialog({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);

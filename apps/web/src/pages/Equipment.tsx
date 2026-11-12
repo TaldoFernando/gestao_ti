@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router';
 import { api, session, sectorPath, type Equipment, type Movement, type Sector } from '../api';
 import { formatDate } from './tickets-shared';
-import { Button, Confirm, Dialog, ErrorText, Field, input, Pill, useInventory } from '../ui';
+import { Button, Confirm, Dialog, ErrorText, Field, input, Pager, Pill, usePage, useInventory } from '../ui';
 
 export default function EquipmentPage() {
   const { sectors, equipment, error, loading, reload } = useInventory();
@@ -25,6 +25,7 @@ export default function EquipmentPage() {
       [e.name, e.type, e.assetTag, e.serial, sectorPath(sectors, e.sectorId)].join(' ').toLocaleLowerCase('pt-BR').includes(q),
   );
   const types = [...new Set(equipment.map((e) => e.type))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  const paged = usePage(rows, 20, `${q}|${type}|${sectorId}`);
 
   return (
     <>
@@ -62,7 +63,7 @@ export default function EquipmentPage() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((e) => (
+            {paged.pageItems.map((e) => (
               <tr key={e.id} className="border-b border-[#eee] transition-colors hover:bg-[#fafafa]">
                 <td className="py-3.5 pr-5">
                   {e.name}
@@ -88,6 +89,7 @@ export default function EquipmentPage() {
           <p className="py-12 text-center text-muted">Nenhum equipamento encontrado. Ajuste os filtros ou cadastre um novo.</p>
         )}
       </div>
+      <Pager page={paged.page} pages={paged.pages} total={rows.length} onChange={paged.setPage} />
 
       <EquipmentForm sectors={sectors} types={types} value={editing} onClose={() => setEditing(null)} onSaved={reload} />
       <History equipment={history} onClose={() => setHistory(null)} />

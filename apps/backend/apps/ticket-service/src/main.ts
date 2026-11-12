@@ -95,8 +95,19 @@ class TicketsController {
     return t;
   }
 
+  // Paginado por offset; o total vai no cabeçalho X-Total-Count para a resposta continuar sendo uma lista.
   @Get()
-  list(@Query('status') status?: string, @Query('q') q?: string, @Query('mine') mine?: string, @Headers() h: Record<string, string> = {}) {
+  async list(
+    @Res({ passthrough: true }) res: Response,
+    @Headers() h: Record<string, string>,
+    @Query('status') status?: string,
+    @Query('q') q?: string,
+    @Query('mine') mine?: string,
+    @Query('page') pageParam?: string,
+    @Query('pageSize') sizeParam?: string,
+  ) {
+    const page = Math.max(1, Number(pageParam) || 1);
+    const pageSize = Math.min(100, Math.max(1, Number(sizeParam) || 20));
     const where: Prisma.TicketWhereInput = {};
     if (status) where.status = status as never;
     if (mine) where.assigneeId = me(h).id;
@@ -105,12 +116,19 @@ class TicketsController {
       where.OR = [{ protocol: like }, { title: like }, { requesterName: like }, { sectorName: like }, { equipmentTag: like }];
     }
     // Fila: prioridade alta primeiro, depois os mais antigos.
-    return db.ticket.findMany({
-      where,
-      orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
-      take: 200, // ponytail: sem paginação; adicionar cursor quando a fila passar disso
-      select: { id: true, protocol: true, title: true, status: true, priority: true, requesterName: true, sectorName: true, assigneeName: true, createdAt: true },
-    });
+    const [total, items] = await db.$transaction([
+      db.ticket.count({ where }),
+      db.ticket.findMany({
+        where,
+        // id desempata: sem ele, itens com mesma data podem pular ou repetir entre páginas.
+        orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }, { id: 'asc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        select: { id: true, protocol: true, title: true, status: true, priority: true, requesterName: true, sectorName: true, assigneeName: true, createdAt: true },
+      }),
+    ]);
+    res.setHeader('X-Total-Count', String(total));
+    return items;
   }
 
   @Get(':id')

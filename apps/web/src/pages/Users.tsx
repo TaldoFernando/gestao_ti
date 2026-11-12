@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, sectorPath, type AppUser } from '../api';
-import { Button, Dialog, ErrorText, Field, input, useInventory } from '../ui';
+import { Button, Dialog, ErrorText, Field, input, Pager, Pill, usePage, useInventory } from '../ui';
 import { SectorOptions } from './Equipment';
 
 export default function Users() {
@@ -9,6 +9,13 @@ export default function Users() {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState('');
   const [formError, setFormError] = useState('');
+  const [search, setSearch] = useState('');
+  const [role, setRole] = useState<'' | 'TECNICO' | 'RESPONSAVEL'>('');
+  const q = search.trim().toLocaleLowerCase('pt-BR');
+  const rows = users.filter(
+    (u) => (!role || u.role === role) && [u.name, u.email, sectorPath(sectors, u.sectorId)].join(' ').toLocaleLowerCase('pt-BR').includes(q),
+  );
+  const paged = usePage(rows, 20, `${q}|${role}`);
   const load = () => api<AppUser[]>('/users').then(setUsers).catch((e: Error) => setError(e.message));
   useEffect(() => {
     load();
@@ -35,15 +42,23 @@ export default function Users() {
         </div>
         <Button variant="primary" onClick={() => { setFormError(''); setOpen(true); }}>Cadastrar usuário</Button>
       </div>
+      <div className="mt-6 flex flex-wrap gap-2" role="group" aria-label="Filtrar por perfil">
+        <Pill active={!role} onClick={() => setRole('')}>Todos</Pill>
+        <Pill active={role === 'TECNICO'} onClick={() => setRole('TECNICO')}>Técnicos</Pill>
+        <Pill active={role === 'RESPONSAVEL'} onClick={() => setRole('RESPONSAVEL')}>Responsáveis</Pill>
+      </div>
+      <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por nome, e-mail ou setor" aria-label="Buscar usuários" className={`${input} mt-4`} />
       <ErrorText>{error}</ErrorText>
+      {users.length > 0 && !rows.length && <p className="py-12 text-center text-muted">Nenhum usuário encontrado.</p>}
       <ul className="mt-2">
-        {users.map((u) => (
+        {paged.pageItems.map((u) => (
           <li key={u.id} className="grid gap-x-6 border-b border-line py-4 md:grid-cols-[1fr_1fr_auto]">
             <span><span className="font-medium">{u.name}</span><span className="block text-sm text-muted">{u.email}</span></span>
             <span className="text-muted">{u.role === 'TECNICO' ? 'Técnico de TI' : `Responsável · ${sectorPath(sectors, u.sectorId) || 'sem setor'}`}</span>
           </li>
         ))}
       </ul>
+      <Pager page={paged.page} pages={paged.pages} total={rows.length} onChange={paged.setPage} />
 
       <Dialog open={open} onClose={() => setOpen(false)} title="Cadastrar usuário">
         <form key={String(open)} onSubmit={submit} className="grid gap-4">
