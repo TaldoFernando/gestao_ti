@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+/* Design E — Contraste editorial */
+@theme {
+  --font-sans: "Outfit", system-ui, sans-serif;
+  --font-mono: "DM Mono", ui-monospace, monospace;
+  --color-ink: #111111;
+  --color-muted: #6b6b6b;
+  --color-line: #e2e2e2;
+  --color-gold: #e6b800;
+}

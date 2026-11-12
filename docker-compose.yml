@@ -1,0 +1,86 @@
+x-backend: &backend
+  env_file: .env
+  restart: unless-stopped
+  healthcheck:
+    test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+    interval: 10s
+    retries: 5
+
+x-postgres: &postgres
+  image: postgres:16-alpine
+  env_file: .env
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+    interval: 5s
+    retries: 10
+
+services:
+  web:
+    build: { context: ./apps/web }
+    ports: ["8080:80"]
+    depends_on: [gateway]
+
+  gateway:
+    <<: *backend
+    build: { context: ./apps/backend, args: { APP: gateway } }
+    ports: ["3000:3000"]
+    environment:
+      TICKET_SERVICE_URL: http://ticket-service:3000
+      ASSET_SERVICE_URL: http://asset-service:3000
+    depends_on: [ticket-service, asset-service]
+
+  ticket-service:
+    <<: *backend
+    build: { context: ./apps/backend, args: { APP: ticket-service } }
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres-tickets:5432/db_tickets
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672
+    depends_on:
+      postgres-tickets: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  asset-service:
+    <<: *backend
+    build: { context: ./apps/backend, args: { APP: asset-service } }
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres-assets:5432/db_assets
+    depends_on:
+      postgres-assets: { condition: service_healthy }
+
+  notification-worker:
+    build: { context: ./apps/backend, args: { APP: notification-worker } }
+    env_file: .env
+    restart: unless-stopped
+    environment:
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+    depends_on:
+      rabbitmq: { condition: service_healthy }
+
+  postgres-tickets:
+    <<: *postgres
+    environment: { POSTGRES_DB: db_tickets }
+    volumes: [pgdata-tickets:/var/lib/postgresql/data]
+
+  postgres-assets:
+    <<: *postgres
+    environment: { POSTGRES_DB: db_assets }
+    volumes: [pgdata-assets:/var/lib/postgresql/data]
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    env_file: .env
+    ports: ["15672:15672"]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      retries: 10
+
+  mailpit:
+    image: axllent/mailpit:v1.21
+    ports: ["8025:8025"]
+
+volumes:
+  pgdata-tickets:
+  pgdata-assets:
