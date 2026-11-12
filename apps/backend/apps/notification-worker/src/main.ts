@@ -2,9 +2,11 @@ import { Logger } from '@nestjs/common';
 import { connect, type ConsumeMessage } from 'amqplib';
 import { createTransport } from 'nodemailer';
 import { DLQ, MAX_ATTEMPTS, QUEUE, RETRY_QUEUE, assertTopology, type TicketEvent } from '@app/common';
+import { SeenIds } from './dedup';
 import { render } from './templates';
 
 const log = new Logger('Worker');
+const seen = new SeenIds();
 const mailer = createTransport({
   host: process.env.SMTP_HOST ?? 'localhost',
   port: Number(process.env.SMTP_PORT ?? 1025),
@@ -26,12 +28,23 @@ async function start() {
   await ch.consume(QUEUE, async (msg: ConsumeMessage | null) => {
     if (!msg) return;
     const attempt = Number(msg.properties.headers?.['x-attempts'] ?? 1);
+    // messageId = id da linha do outbox; o mesmo evento republicado chega com o mesmo id.
+    const id: string | undefined = msg.properties.messageId;
+    if (id && seen.has(id)) {
+      log.warn(`mensagem repetida ignorada (${id})`);
+      ch.ack(msg);
+      return;
+    }
+    // Marca antes de enviar para que uma cópia que chegue ao mesmo tempo (prefetch 5) também seja ignorada.
+    if (id) seen.add(id);
     try {
       const event = JSON.parse(msg.content.toString()) as TicketEvent;
       const { subject, text } = render(event);
       await mailer.sendMail({ from: FROM, to: event.email, subject, text });
       log.log(`${event.type} ${event.protocol} → ${event.email}`);
     } catch (e) {
+      // Não enviou: libera o id para a nova tentativa (retry) passar.
+      if (id) seen.delete(id);
       // Retry com espera (fila com TTL); depois de MAX_ATTEMPTS vai para a DLQ para análise manual.
       const target = attempt < MAX_ATTEMPTS ? RETRY_QUEUE : DLQ;
       ch.sendToQueue(target, msg.content, {
