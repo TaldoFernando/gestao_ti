@@ -58,6 +58,7 @@ services:
       RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
+      PUBLIC_URL: http://localhost:8080
     depends_on:
       rabbitmq: { condition: service_healthy }
 

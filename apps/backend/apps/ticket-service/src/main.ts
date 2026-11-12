@@ -13,6 +13,11 @@ import { HealthController } from '@app/common';
 import { Prisma, PrismaClient } from '.prisma/ticket';
 import { newProtocol } from './protocol';
 import { CreateEventDto, CreateTicketDto, UpdateTicketDto } from './dto';
+import { enqueue, startOutboxPublisher } from './outbox';
+
+const notifyFields = (t: { protocol: string; title: string; email: string; requesterName: string }) => ({
+  protocol: t.protocol, title: t.title, email: t.email, requesterName: t.requesterName,
+});
 
 const db = new PrismaClient();
 const ASSET = process.env.ASSET_SERVICE_URL ?? 'http://localhost:3002';
@@ -60,14 +65,18 @@ class TicketsController {
   @UseInterceptors(upload)
   async create(@Body() dto: CreateTicketDto, @UploadedFiles() files: Express.Multer.File[] = []) {
     const name = await sectorName(dto.sectorId);
-    const ticket = await db.ticket.create({
-      data: {
-        ...dto,
-        protocol: newProtocol(), // ponytail: colisão é ~1 em 10^12; tratar P2002 com retry se o volume crescer muito
-        sectorName: name,
-        events: { create: { type: 'ABERTURA', message: 'Chamado aberto.' } },
-        attachments: { create: files.map((f) => ({ filename: f.originalname, path: f.filename, mime: f.mimetype, size: f.size })) },
-      },
+    const ticket = await db.$transaction(async (tx) => {
+      const t = await tx.ticket.create({
+        data: {
+          ...dto,
+          protocol: newProtocol(), // ponytail: colisão é ~1 em 10^12; tratar P2002 com retry se o volume crescer muito
+          sectorName: name,
+          events: { create: { type: 'ABERTURA', message: 'Chamado aberto.' } },
+          attachments: { create: files.map((f) => ({ filename: f.originalname, path: f.filename, mime: f.mimetype, size: f.size })) },
+        },
+      });
+      await enqueue(tx, { type: 'ticket.created', ...notifyFields(t) });
+      return t;
     });
     return { protocol: ticket.protocol };
   }
@@ -138,14 +147,25 @@ class TicketsController {
     } else if (dto.assignee === null) {
       Object.assign(data, { assigneeId: null, assigneeName: null });
     }
-    return db.ticket.update({ where: { id }, data: { ...data, events: { create: events } } });
+    return db.$transaction(async (tx) => {
+      const t = await tx.ticket.update({ where: { id }, data: { ...data, events: { create: events } } });
+      if (t.status !== current.status) await enqueue(tx, { type: 'ticket.status_changed', ...notifyFields(t), status: STATUS_LABEL[t.status] });
+      return t;
+    });
   }
 
   @Post(':id/events')
   async addEvent(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CreateEventDto, @Headers() h: Record<string, string>) {
     const isPublic = dto.public ?? true;
-    return db.ticketEvent.create({
-      data: { ticketId: id, type: isPublic ? 'RESPOSTA' : 'NOTA', public: isPublic, message: dto.message, authorName: me(h).name },
+    const t = await db.ticket.findUnique({ where: { id } });
+    if (!t) throw new NotFoundException('Chamado não encontrado.');
+    return db.$transaction(async (tx) => {
+      const event = await tx.ticketEvent.create({
+        data: { ticketId: id, type: isPublic ? 'RESPOSTA' : 'NOTA', public: isPublic, message: dto.message, authorName: me(h).name },
+      });
+      // Nota interna não sai do sistema.
+      if (isPublic) await enqueue(tx, { type: 'ticket.replied', ...notifyFields(t), message: dto.message });
+      return event;
     });
   }
 
@@ -175,6 +195,8 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
   app.useGlobalFilters(new PrismaErrorFilter(app.getHttpAdapter()), new UploadErrorFilter(app.getHttpAdapter()));
+  app.enableShutdownHooks();
+  startOutboxPublisher(db);
   await app.listen(process.env.PORT ?? 3000);
 }
 if (require.main === module) bootstrap();

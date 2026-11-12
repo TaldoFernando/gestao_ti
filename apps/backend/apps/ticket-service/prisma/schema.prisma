@@ -76,3 +76,15 @@ model Attachment {
   size      Int
   createdAt DateTime @default(now())
 }
+
+// Transactional Outbox: o evento é gravado na mesma transação do chamado.
+// O publisher (outbox.ts) envia ao RabbitMQ e marca publishedAt; se o broker cair, nada se perde.
+model Outbox {
+  id          String    @id @default(uuid())
+  type        String
+  payload     Json
+  createdAt   DateTime  @default(now())
+  publishedAt DateTime?
+
+  @@index([publishedAt, createdAt])
+}
