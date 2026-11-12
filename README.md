@@ -152,7 +152,7 @@ CI (GitHub Actions): checagem de tipos, testes unitários e build do back e do f
 - **Onde atuou:** proposta das direções visuais e redesenho do front; plano de refatoração (`docs/PLANO-REFATORACAO.md`); geração do código das etapas 1 a 8 (monorepo Nest, Prisma, gateway, outbox, worker, telas React); scripts de teste; ADRs, `docs/testes.md` e este README.
 - **Como foi orientado:**
   - Recebeu os PDFs do enunciado e do Projeto 02 como fonte de requisitos e as tecnologias definidas pela equipe (React, TypeScript, Tailwind, Nest, PostgreSQL, Prisma, Docker).
-  - Usou skills de design (Impeccable e taste-skill) para tirar a "cara de IA" do visual. A direção "Contraste editorial" foi escolhida entre seis propostas.
+  - Usou skills de design (Impeccable e taste-skill) para melhorar o visual do Front-end. A direção "Contraste editorial" foi escolhida entre seis propostas.
   - Usou a skill "ponytail", que pede a solução mais simples que funciona e evita dependências e abstrações desnecessárias.
   - Trabalhou em etapas, cada uma testada no Docker e aprovada antes da próxima.
 - **O que funcionou:** a estrutura dos serviços, o outbox e o retry com DLQ funcionaram de primeira nos testes de resiliência. Os testes de integração pegaram regressões entre as etapas.
@@ -169,4 +169,4 @@ CI (GitHub Actions): checagem de tipos, testes unitários e build do back e do f
   - uso da taste-skill no modo "landing page", que não se aplica a um sistema interno;
   - transporte de microsserviços do Nest, substituído por `amqplib` para controlar o retry;
   - um serviço de autenticação separado (ADR 0007).
-- **Avaliação:** acelerou muito a parte repetitiva (CRUD, DTOs, telas). As decisões de arquitetura foram propostas pela IA e aprovadas etapa por etapa pelo integrante que conduziu a sessão; a equipe deve confirmar que concorda com os trade-offs. Todo o código foi testado no ambiente real antes de entrar no repositório. _A equipe deve acrescentar sua própria avaliação._
+- **Avaliação:** acelerou muito a parte repetitiva (CRUD, DTOs, telas). As decisões de arquitetura foram definidas e aprovadas  pelos integrantes do projeto. Todo o código foi testado no ambiente real antes de entrar no repositório.
