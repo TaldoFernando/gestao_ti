@@ -10,6 +10,7 @@ import { OpenTicket, TrackTicket } from './pages/Public';
 import { TicketDetail, TicketList } from './pages/Tickets';
 import Report from './pages/Report';
 import Users from './pages/Users';
+import Profile from './pages/Profile';
 import './index.css';
 
 function Layout() {
@@ -27,6 +28,7 @@ function Layout() {
           <NavLink to="/equipamentos" className={link}>Equipamentos</NavLink>
           <NavLink to="/setores" className={link}>Setores</NavLink>
           {s.user.role === 'TECNICO' && <NavLink to="/usuarios" className={link}>Usuários</NavLink>}
+          <NavLink to="/perfil" className={link}>Meu perfil</NavLink>
         </nav>
         <div className="ml-auto text-sm md:ml-0 md:mt-auto">
           <p className="hidden text-white md:block">{s.user.name}</p>
@@ -51,6 +53,7 @@ createRoot(document.getElementById('root')!).render(
           <Route index element={<Overview />} />
           <Route path="equipamentos" element={<EquipmentPage />} />
           <Route path="setores" element={<SectorsPage />} />
+          <Route path="perfil" element={<Profile />} />
           <Route path="chamados" element={<TicketList />} />
           <Route path="chamados/:id" element={<TicketDetail />} />
           <Route path="setores/:id/relatorio" element={<Report />} />
