@@ -1,13 +1,16 @@
+import { useState } from 'react';
 import { Link, useParams } from 'react-router';
-import { equipmentIn, sectorPath } from '../api';
+import { download, equipmentIn, sectorPath } from '../api';
 import { Button, ErrorText, useInventory } from '../ui';
 
 const today = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'long' }).format(new Date());
 
-/** Termo de responsabilidade / relatório por setor. Impressão pelo navegador (Ctrl+P ou o botão). */
+/** Termo de responsabilidade / relatório por setor. Impressão pelo navegador ou PDF gerado no servidor (issue #20). */
 export default function Report() {
   const { id } = useParams();
   const { sectors, equipment, error, loading } = useInventory();
+  const [pdf, setPdf] = useState<'idle' | 'busy'>('idle');
+  const [pdfError, setPdfError] = useState('');
   const sector = sectors.find((s) => s.id === id);
   if (loading) return null;
   if (!sector) return <ErrorText>{error || 'Setor não encontrado ou fora do seu acesso.'}</ErrorText>;
@@ -21,8 +24,25 @@ export default function Report() {
     <article className="mx-auto max-w-4xl print:max-w-none">
       <div className="mb-8 flex flex-wrap items-center gap-3 print:hidden">
         <Link to="/setores" className="mr-auto text-sm text-muted underline-offset-4 hover:underline">← Setores</Link>
+        <Button
+          disabled={pdf === 'busy'}
+          onClick={async () => {
+            setPdf('busy');
+            setPdfError('');
+            try {
+              await download(`/sectors/${sector.id}/report.pdf`, 'termo.pdf');
+            } catch (e) {
+              setPdfError((e as Error).message);
+            } finally {
+              setPdf('idle');
+            }
+          }}
+        >
+          {pdf === 'busy' ? 'Gerando PDF…' : 'Baixar PDF'}
+        </Button>
         <Button variant="primary" onClick={() => window.print()}>Imprimir relatório</Button>
       </div>
+      <div className="print:hidden"><ErrorText>{pdfError}</ErrorText></div>
 
       <header className="border-b border-ink pb-5">
         <p className="text-sm text-muted">Prefeitura Municipal de Jacaraú · Setor de Tecnologia da Informação</p>

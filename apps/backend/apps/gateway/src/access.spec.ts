@@ -16,6 +16,7 @@ it('o resto exige token', () => {
 
 it('responsável só lê inventário', () => {
   expect(authorize('GET', '/api/equipment', responsavel)).toBeNull();
+  expect(authorize('GET', '/api/sectors/s/report.pdf', responsavel)).toBeNull(); // termo em PDF (escopo no asset-service)
   expect(authorize('POST', '/api/equipment', responsavel)).toBe(403);
   expect(authorize('GET', '/api/users', responsavel)).toBe(403);
   expect(authorize('GET', '/api/tickets', responsavel)).toBe(403);

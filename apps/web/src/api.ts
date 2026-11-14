@@ -66,6 +66,22 @@ async function send<T>(path: string, init: RequestInit & { json?: unknown } = {}
   return { body, res };
 }
 
+/** Baixa um arquivo gerado no servidor (ex.: PDF do termo) com o token, já que um link simples não manda o cabeçalho. */
+export async function download(path: string, fallbackName: string) {
+  const token = session()?.token;
+  const res = await fetch(`/api${path}`, { headers: token ? { authorization: `Bearer ${token}` } : {} });
+  if (res.status === 401 && token) logout();
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, body.message ?? 'Não foi possível gerar o arquivo. Tente de novo.');
+  }
+  const name = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') ?? '')?.[1] ?? fallbackName;
+  const url = URL.createObjectURL(await res.blob());
+  const a = Object.assign(document.createElement('a'), { href: url, download: name });
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
 export async function login(email: string, password: string) {
   const data = await api<{ token: string; user: User }>('/auth/login', { method: 'POST', json: { email, password } });
   localStorage.setItem(KEY, JSON.stringify(data));
