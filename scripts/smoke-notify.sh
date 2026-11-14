@@ -39,8 +39,8 @@ docker compose logs --since 2m notification-worker 2>&1 | grep -q "tentativa 2/3
 # 4. Inventário fora do ar: o chamado abre mesmo assim (isolamento de falhas, ADR 0001)
 SECTOR=$(curl -s $B/sectors | j "o[0].id")
 docker compose stop asset-service >/dev/null 2>&1
-P=$(curl -s -X POST $B/tickets -F requesterName=Teste -F email=asset.$RUN@exemplo.com -F whatsapp=83999990000 -F sectorId=$SECTOR -F title=Teste-isolamento -F description=D | j "o.protocol")
-[[ $P == JAC-* ]] && echo "ok   chamado abre com o inventário parado ($P)" || { echo "FAIL isolamento: $P"; docker compose start asset-service >/dev/null; exit 1; }
+P=$(curl -s -X POST $B/tickets -F requesterName=Teste -F email=asset.$RUN@exemplo.com -F whatsapp=83999990000 -F sectorId=$SECTOR -F equipmentTag=PAT-00201 -F title=Teste-isolamento -F description=D | j "o.protocol")
+[[ $P == JAC-* ]] && echo "ok   chamado abre com o inventário parado, mesmo com patrimônio ($P)" || { echo "FAIL isolamento: $P"; docker compose start asset-service >/dev/null; exit 1; }
 expect "$(curl -s -o /dev/null -w '%{http_code}' $B/sectors)" 503 "gateway responde 503 para o inventário em vez de cair"
 docker compose start asset-service >/dev/null 2>&1
 wait_for '[ "$(curl -s -o /dev/null -w "%{http_code}" $B/sectors)" = 200 ]' 90 && echo "ok   inventário volta sozinho"

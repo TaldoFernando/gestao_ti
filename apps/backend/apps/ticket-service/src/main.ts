@@ -12,6 +12,7 @@ import { extname, resolve } from 'node:path';
 import { HealthController } from '@app/common';
 import { Prisma, PrismaClient } from '.prisma/ticket';
 import { withUniqueProtocol } from './protocol';
+import { findEquipment } from './inventory';
 import { CreateEventDto, CreateTicketDto, UpdateTicketDto } from './dto';
 import { enqueue, startOutboxPublisher } from './outbox';
 
@@ -64,7 +65,7 @@ class TicketsController {
   @Post()
   @UseInterceptors(upload)
   async create(@Body() dto: CreateTicketDto, @UploadedFiles() files: Express.Multer.File[] = []) {
-    const name = await sectorName(dto.sectorId);
+    const [name, equipment] = await Promise.all([sectorName(dto.sectorId), findEquipment(dto.equipmentTag, ASSET)]);
     // Protocolo repetido (~1 em 10^12) → P2002 → nova transação com outro protocolo (ADR 0006).
     const ticket = await withUniqueProtocol((protocol) => db.$transaction(async (tx) => {
       const t = await tx.ticket.create({
@@ -72,6 +73,8 @@ class TicketsController {
           ...dto,
           protocol,
           sectorName: name,
+          // Conferido no inventário: guarda o id e o patrimônio como está cadastrado. Inventário fora: fica só o texto.
+          ...(equipment && { equipmentId: equipment.id, equipmentTag: equipment.assetTag }),
           events: { create: { type: 'ABERTURA', message: 'Chamado aberto.' } },
           attachments: { create: files.map((f) => ({ filename: f.originalname, path: f.filename, mime: f.mimetype, size: f.size })) },
         },
@@ -104,6 +107,7 @@ class TicketsController {
     @Query('status') status?: string,
     @Query('q') q?: string,
     @Query('mine') mine?: string,
+    @Query('equipmentId') equipmentId?: string,
     @Query('page') pageParam?: string,
     @Query('pageSize') sizeParam?: string,
   ) {
@@ -112,6 +116,7 @@ class TicketsController {
     const where: Prisma.TicketWhereInput = {};
     if (status) where.status = status as never;
     if (mine) where.assigneeId = me(h).id;
+    if (equipmentId) where.equipmentId = equipmentId; // chamados de um equipamento (histórico no inventário)
     if (q) {
       const like = { contains: q, mode: 'insensitive' as const };
       where.OR = [{ protocol: like }, { title: like }, { requesterName: like }, { sectorName: like }, { equipmentTag: like }];

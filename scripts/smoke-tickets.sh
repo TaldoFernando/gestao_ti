@@ -17,6 +17,7 @@ SECTOR=$(echo "$SECTOR_JSON" | j "o.id"); SECTOR_NAME=$(echo "$SECTOR_JSON" | j 
 P=$(curl -s -X POST $B/tickets -F requesterName=Maria -F email=maria@exemplo.com -F whatsapp=83999990000 \
   -F sectorId=$SECTOR -F equipmentTag=PAT-00201 -F title=Impressora-nao-liga -F description=Desde-ontem -F files=@"$TMP/foto.png;type=image/png" | j "o.protocol")
 [[ $P =~ ^JAC-[A-Z2-9]{4}-[A-Z2-9]{4}$ ]] && echo "ok   chamado aberto sem login ($P)" || { echo "FAIL protocolo: $P"; exit 1; }
+expect "$(curl -s -o /dev/null -w '%{http_code}' -X POST $B/tickets -F requesterName=X -F email=a@b.com -F whatsapp='83999990000' -F equipmentTag=PAT-99999 -F title=T -F description=D)" 400 "patrimônio inexistente é recusado"
 expect "$(curl -s -o /dev/null -w '%{http_code}' -X POST $B/tickets -F requesterName=X -F email=ruim -F whatsapp=1 -F title=T -F description=D)" 400 "validação do formulário"
 expect "$(curl -s -o /dev/null -w '%{http_code}' -X POST $B/tickets -F requesterName=X -F email=a@b.com -F whatsapp='83999990000' -F title=T -F description=D -F files=@"$TMP/virus.exe;type=application/x-msdownload")" 400 "anexo de tipo proibido"
 PUB=$(curl -s $B/tickets/protocol/${P,,})
@@ -28,6 +29,9 @@ expect "$(curl -s -o /dev/null -w '%{http_code}' $B/tickets)" 401 "fila exige lo
 T=$(curl -s -X POST $B/auth/login -H "$JSON" -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASSWORD\"}" | j "o.token")
 c() { curl -s -H "Authorization: Bearer $T" "$@"; }
 ID=$(c "$B/tickets?q=$P" | j "o[0].id")
+EQ=$(c "$B/equipment?q=PAT-00201" | j "o[0].id")
+expect "$(c $B/tickets/$ID | j "o.equipmentId+'|'+o.equipmentTag")" "$EQ|PAT-00201" "chamado ligado ao equipamento do inventário"
+expect "$(c "$B/tickets?equipmentId=$EQ&status=" | j "o.some(t=>t.id==='$ID')")" true "histórico do equipamento lista o chamado"
 expect "$(c -X PATCH $B/tickets/$ID -H "$JSON" -d '{"assignee":"me","priority":"ALTA"}' | j "o.status+'|'+o.assigneeName+'|'+o.priority")" "EM_ATENDIMENTO|Administrador|ALTA" "assumir chamado coloca em atendimento"
 c -o /dev/null -X POST $B/tickets/$ID/events -H "$JSON" -d '{"message":"Trocamos o cabo de energia.","public":true}'
 c -o /dev/null -X POST $B/tickets/$ID/events -H "$JSON" -d '{"message":"Cabo veio do almoxarifado.","public":false}'

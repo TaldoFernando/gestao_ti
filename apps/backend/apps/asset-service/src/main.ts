@@ -104,6 +104,16 @@ class EquipmentController {
     return db.equipment.findMany({ where, orderBy: { name: 'asc' }, include: { sector: { include: { parent: true } } } });
   }
 
+  // Usado pelo ticket-service para conferir o patrimônio do chamado. Devolve o mínimo: id e patrimônio.
+  // Maiúsculas/minúsculas não importam (o cidadão digita "pat-00201").
+  @Get('by-tag/:tag')
+  async byTag(@Param('tag') tag: string, @Headers() h: Hdrs) {
+    const e = await db.equipment.findFirst({ where: { assetTag: { equals: tag.trim(), mode: 'insensitive' } }, select: { id: true, assetTag: true } });
+    if (!e) notFound();
+    await assertVisible(h, e.id);
+    return e;
+  }
+
   @Get(':id')
   async get(@Param('id', ParseUUIDPipe) id: string, @Headers() h: Hdrs) {
     await assertVisible(h, id);
