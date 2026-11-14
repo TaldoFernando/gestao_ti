@@ -1,6 +1,6 @@
 import {
   ArgumentsHost, BadRequestException, Body, Catch, ConflictException, Controller, Delete, ExceptionFilter,
-  Get, Headers, HttpCode, Module, NotFoundException, Param, ParseUUIDPipe, Patch, Post, Query, ValidationPipe,
+  Get, Headers, HttpCode, Module, NotFoundException, Param, ParseUUIDPipe, Patch, Post, Query, StreamableFile, ValidationPipe,
 } from '@nestjs/common';
 import { BaseExceptionFilter, NestFactory } from '@nestjs/core';
 import { HealthController } from '@app/common';
@@ -9,6 +9,7 @@ import { db } from './db';
 import { UsersController } from './users';
 import { CreateEquipmentDto, CreateSectorDto, UpdateEquipmentDto, UpdateSectorDto } from './dto';
 import { seed } from './seed';
+import { buildReportPdf, reportNumber, slug } from './report';
 
 // Converte erros de constraint do Postgres em respostas HTTP; a regra de negócio vive no schema.
 @Catch(Prisma.PrismaClientKnownRequestError)
@@ -33,6 +34,26 @@ class SectorsController {
   @Get(':id')
   async get(@Param('id', ParseUUIDPipe) id: string) {
     return (await db.sector.findUnique({ where: { id }, include: { children: true } })) ?? notFound();
+  }
+
+  /**
+   * Termo de responsabilidade do setor em PDF (issue #20): equipamentos do setor e dos locais vinculados,
+   * com nº, data de emissão e assinaturas. Responsável só gera o do próprio setor (ou de um local dele).
+   */
+  @Get(':id/report.pdf')
+  async report(@Param('id', ParseUUIDPipe) id: string, @Headers() h: Hdrs) {
+    const ids = await scope(h);
+    if (ids && !ids.includes(id)) notFound();
+    const sector = (await db.sector.findUnique({ where: { id }, include: { parent: true, children: true } })) ?? notFound();
+    const names = new Map([[sector.id, sector.name], ...sector.children.map((c) => [c.id, c.name] as [string, string])]);
+    const equipment = await db.equipment.findMany({ where: { sectorId: { in: [...names.keys()] } } });
+    // Mesma ordem da tela: por local, depois por nome.
+    const items = equipment
+      .map((e) => ({ ...e, local: names.get(e.sectorId ?? '') ?? '' }))
+      .sort((a, b) => (a.sectorId === b.sectorId ? 0 : a.sectorId === sector.id ? -1 : b.sectorId === sector.id ? 1 : a.local.localeCompare(b.local, 'pt-BR')) || a.name.localeCompare(b.name, 'pt-BR'));
+    const issuedAt = new Date();
+    const pdf = await buildReportPdf({ sectorName: sector.name, parentName: sector.parent?.name ?? null, items, issuedAt, number: reportNumber(sector.id, issuedAt) });
+    return new StreamableFile(pdf, { type: 'application/pdf', disposition: `inline; filename="termo-${slug(sector.name)}.pdf"`, length: pdf.length });
   }
 
   @Post()

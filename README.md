@@ -12,7 +12,7 @@ Projeto final de Engenharia de Sistemas Distribuídos 2026.1 (UFPB, Centro de In
 |---|---|
 | Cidadão / servidor (sem login) | abre chamado com fotos, PDF ou vídeo; recebe o protocolo `JAC-XXXX-XXXX` e e-mails a cada mudança; acompanha o status pelo protocolo |
 | Técnico de TI | fila por status e prioridade; assume, responde (público ou nota interna), muda status; CRUD de setores, locais e equipamentos; histórico de movimentação; cadastro de usuários |
-| Responsável do setor | vê só os equipamentos do próprio setor e locais vinculados; imprime o relatório com campos de assinatura |
+| Responsável do setor | vê só os equipamentos do próprio setor e locais vinculados; imprime ou baixa em PDF o termo de responsabilidade com campos de assinatura |
 
 ## Arquitetura
 
@@ -80,10 +80,10 @@ Outras decisões: [stack TypeScript (0005)](docs/adr/0005-stack-typescript.md), 
 ### Trade-offs principais
 
 - **Consistência eventual entre serviços:** o nome do setor é copiado no chamado e não muda se o setor for renomeado (ADR 0002).
-- **E-mail pelo menos uma vez:** em caso raro de queda entre o confirm e o update do outbox, o e-mail pode sair duplicado (ADR 0004).
+- **E-mail pelo menos uma vez:** em caso raro de queda entre o confirm e o update do outbox, o evento é publicado de novo; o worker ignora o repetido pelo `messageId`, mas só enquanto não reiniciar (ADR 0004).
 - **Instância única:** o rate limit fica em memória e o publisher do outbox não usa `SKIP LOCKED`. Escalar o gateway ou o ticket-service exige Redis e `SKIP LOCKED` (ADRs 0003 e 0004).
 - **Usuários no asset-service** em vez de um serviço de autenticação próprio (ADR 0007).
-- **Relatório por `@media print`** em vez de geração de PDF no servidor.
+- **Termo em PDF gerado no servidor** (`GET /api/sectors/:id/report.pdf`, com pdfkit) além da impressão pelo navegador: o arquivo sai igual em qualquer navegador e tem nº e data de emissão; em troca, o layout fica duplicado (tela e PDF).
 
 ## Como executar
 

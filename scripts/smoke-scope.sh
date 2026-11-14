@@ -36,6 +36,15 @@ expect "$(r -o /dev/null -w '%{http_code}' $B/equipment/$ALHEIO/movements)" 404 
 expect "$(r -o /dev/null -w '%{http_code}' "$B/equipment?sectorId=$SAUDE")" 200 "filtrar por setor alheio não vaza nada..."
 expect "$(r "$B/equipment?sectorId=$SAUDE" | j "o.length")" 0 "...retorna lista vazia"
 
+# Termo de responsabilidade em PDF (issue #20): gerado no servidor, com o mesmo escopo do inventário
+PDF=$(mktemp); trap 'rm -f $PDF; cleanup' EXIT
+expect "$(r -o $PDF -w '%{http_code} %{content_type}' $B/sectors/$EDU/report.pdf)" "200 application/pdf" "responsável baixa o termo do próprio setor"
+expect "$(head -c 5 $PDF)" "%PDF-" "o arquivo é um PDF"
+expect "$(r -o /dev/null -w '%{http_code}' $B/sectors/$ESCOLA/report.pdf)" 200 "e o do local vinculado"
+expect "$(r -o /dev/null -w '%{http_code}' $B/sectors/$SAUDE/report.pdf)" 404 "termo de outro setor não sai"
+expect "$(c -o /dev/null -w '%{http_code}' $B/sectors/$SAUDE/report.pdf)" 200 "técnico gera o termo de qualquer setor"
+expect "$(curl -s -o /dev/null -w '%{http_code}' $B/sectors/$EDU/report.pdf)" 401 "sem login não gera termo"
+
 # Movimentação: mover registra origem, destino e autor; renomear não registra
 MOVED=$(new_equipment "Smoke movido" $ESCOLA)
 c -o /dev/null -X PATCH $B/equipment/$MOVED -H "$JSON" -d "{\"sectorId\":\"$SAUDE\"}"
