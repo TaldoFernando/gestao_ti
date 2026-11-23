@@ -19,8 +19,13 @@ const base = 'http://localhost:3000/api';
   const protocol = `SMOKE-${randomUUID()}`;
   try {
     for (let i = 0; i < 2; i++) ch.sendToQueue('notifications.dlq', Buffer.from(JSON.stringify({ type: 'ticket.created', protocol, requesterName: 'Teste', title: 'Teste', email: 'smoke@example.com' })), { messageId: `${protocol}-${i}`, persistent: true, headers: { 'x-last-error': 'Falha de teste', 'x-attempts': 3, 'x-completed-channels': ['email'] } });
+    ch.sendToQueue('notifications.dlq', Buffer.from('null'), { messageId: `${protocol}-invalid`, persistent: true, headers: { 'x-last-error': protocol } });
     await ch.waitForConfirms();
     const list = async () => { const res = await fetch(`${base}/notifications/dlq`, { headers }); assert.equal(res.status, 200); return (await res.json()).items.filter((m) => m.protocol === protocol); };
+    const rawList = await (await fetch(`${base}/notifications/dlq`, { headers })).json();
+    const invalid = rawList.items.find((m) => m.error === protocol);
+    assert.equal(invalid.type, 'inválido');
+    assert.equal((await fetch(`${base}/notifications/dlq/${invalid.id}`, { method: 'DELETE', headers })).status, 204);
     const first = await list(); assert.equal(first.length, 2); assert.equal(first[0].error, 'Falha de teste');
     assert.equal((await list()).length, 2, 'listar não consome');
     const before = (await ch.checkQueue('notifications')).messageCount;

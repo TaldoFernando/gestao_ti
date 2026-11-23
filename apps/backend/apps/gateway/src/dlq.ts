@@ -24,9 +24,12 @@ export async function deadLetters(req: Request, res: Response) {
       if (!msg) break;
       const key = idOf(msg);
       if (req.method === 'GET') {
-        let event;
-        try { event = JSON.parse(msg.content.toString()); } catch { event = {}; }
-        items.push({ id: key, protocol: event.protocol ?? '', type: event.type ?? 'inválido', error: String(msg.properties.headers?.['x-last-error'] ?? 'Sem motivo informado'), attempts: msg.properties.headers?.['x-attempts'] ?? 0 });
+        let event: Record<string, unknown> = {};
+        try {
+          const parsed = JSON.parse(msg.content.toString());
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) event = parsed;
+        } catch { /* Payload malformado também precisa aparecer e permitir descarte. */ }
+        items.push({ id: key, protocol: typeof event.protocol === 'string' ? event.protocol : '', type: typeof event.type === 'string' ? event.type : 'inválido', error: String(msg.properties.headers?.['x-last-error'] ?? 'Sem motivo informado'), attempts: msg.properties.headers?.['x-attempts'] ?? 0 });
       } else if (key === id) {
         if (req.method === 'POST') {
           ch.sendToQueue(QUEUE, msg.content, { ...msg.properties, persistent: true, messageId: randomUUID(), headers: { ...msg.properties.headers, 'x-attempts': 1, 'x-last-error': '' } });
