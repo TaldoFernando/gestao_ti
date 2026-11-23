@@ -112,9 +112,9 @@ export function TicketDetail() {
     }
   }
 
-  // Anexo precisa do token; baixa como blob e abre numa aba.
+  // Anexo usa o cookie de sessão; baixa como blob e abre numa aba.
   async function openAttachment(attId: string) {
-    const res = await fetch(`/api/tickets/${id}/attachments/${attId}`, { headers: { authorization: `Bearer ${session()?.token}` } });
+    const res = await fetch(`/api/tickets/${id}/attachments/${attId}`, { credentials: 'same-origin' });
     if (!res.ok) return setError('Não foi possível abrir o anexo.');
     window.open(URL.createObjectURL(await res.blob()), '_blank', 'noopener');
   }

@@ -5,6 +5,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 set -a; . ./.env; set +a
 B=${BASE_URL:-http://localhost:8080/api}
+# Proteção CSRF: cabeçalho não simples também em chamadas multipart públicas.
+curl() { command curl -H 'X-Requested-With: gestao-ti' "$@"; }
 MAILPIT=http://localhost:8025/api/v1
 RABBIT="http://localhost:15672/api/queues/%2F"
 j() { node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const o=JSON.parse(s||'null');console.log($1)})"; }

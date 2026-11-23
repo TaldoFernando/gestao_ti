@@ -6,7 +6,8 @@
     "start:dev": "nest start --watch",
     "lint": "tsc --noEmit -p tsconfig.json",
     "test": "jest",
-    "postinstall": "prisma generate --schema apps/asset-service/prisma/schema.prisma && prisma generate --schema apps/ticket-service/prisma/schema.prisma"
+    "postinstall": "prisma generate --schema apps/asset-service/prisma/schema.prisma && prisma generate --schema apps/ticket-service/prisma/schema.prisma",
+    "import:assets": "ts-node apps/asset-service/src/import-cli.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
@@ -18,6 +19,7 @@
     "amqplib": "^0.10.4",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
+    "csv-parse": "^7.0.3",
     "nodemailer": "^10.5.0",
     "prisma": "^6.19.3",
     "reflect-metadata": "^0.2.2",
@@ -36,6 +38,7 @@
     "jest": "^29.7.0",
     "supertest": "^7.0.0",
     "ts-jest": "^29.2.5",
+    "ts-node": "^10.9.2",
     "typescript": "^5.6.0"
   },
   "jest": {
@@ -47,6 +50,19 @@
     ],
     "moduleNameMapper": {
       "^@app/common$": "<rootDir>/libs/common/src"
-    }
+    },
+    "transform": {
+      "^.+\\.[tj]s$": [
+        "ts-jest",
+        {
+          "tsconfig": {
+            "allowJs": true
+          }
+        }
+      ]
+    },
+    "transformIgnorePatterns": [
+      "node_modules/(?!@nestjs/jwt/)"
+    ]
   }
 }

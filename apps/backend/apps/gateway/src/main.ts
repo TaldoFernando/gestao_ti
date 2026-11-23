@@ -4,6 +4,8 @@ import { JwtService } from '@nestjs/jwt';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { Readable } from 'node:stream';
 import { HealthController } from '@app/common';
+import { deadLetters } from './dlq';
+import { COOKIE, cookieOptions, sessionToken, csrfAllowed, clearSession } from './session';
 import { authorize, rateLimited, type User } from './access';
 
 const ASSET = process.env.ASSET_SERVICE_URL ?? 'http://localhost:3002';
@@ -19,7 +21,7 @@ const routes: [RegExp, string][] = [
 ];
 
 function currentUser(req: Request): User | null {
-  const token = req.headers.authorization?.match(/^Bearer (.+)$/)?.[1];
+  const token = sessionToken(req);
   if (!token) return null;
   try {
     return jwt.verify<User>(token);
@@ -33,6 +35,7 @@ function guard(req: Request, res: Response, next: NextFunction) {
     res.status(429).json({ message: 'Muitas requisições. Tente de novo em um minuto.' });
     return;
   }
+  if (!csrfAllowed(req)) return void res.status(403).json({ message: 'Origem ou cabeçalho de proteção CSRF inválido.' });
   const user = currentUser(req);
   const denied = authorize(req.method, req.path, user);
   if (denied) {
@@ -55,7 +58,9 @@ async function login(req: Request, res: Response) {
   const body = await upstream.json();
   if (!upstream.ok) return res.status(upstream.status).json(body);
   const user: User = { sub: body.id, role: body.role, sectorId: body.sectorId, name: body.name };
-  res.json({ token: jwt.sign(user), user });
+  res.cookie(COOKIE, jwt.sign(user), cookieOptions());
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ user });
 }
 
 async function proxy(req: Request, res: Response, next: NextFunction) {
@@ -65,7 +70,7 @@ async function proxy(req: Request, res: Response, next: NextFunction) {
     const hasBody = !['GET', 'HEAD'].includes(req.method);
     const upstream = await fetch(target + req.originalUrl, {
       method: req.method,
-      headers: { ...(req.headers as Record<string, string>), host: new URL(target).host },
+      headers: { ...Object.fromEntries(Object.entries(req.headers).filter(([key]) => !['cookie', 'authorization'].includes(key))) as Record<string, string>, host: new URL(target).host },
       body: hasBody ? (Readable.toWeb(req) as ReadableStream) : undefined,
       duplex: 'half',
     } as RequestInit);
@@ -83,14 +88,26 @@ async function proxy(req: Request, res: Response, next: NextFunction) {
 @Module({ controllers: [HealthController] })
 export class AppModule {}
 
-async function bootstrap() {
+export async function createApp() {
   const app = await NestFactory.create(AppModule, { bodyParser: false });
   app.getHttpAdapter().getInstance().set('trust proxy', 1); // IP real vem do nginx
   app.use(guard);
   app.use('/api/auth/login', express.json(), (req: Request, res: Response, next: NextFunction) =>
     req.method === 'POST' ? login(req, res) : next());
+  app.use('/api/auth/session', (req: Request, res: Response, next: NextFunction) => {
+    if (req.method !== 'GET') return next();
+    res.setHeader('Cache-Control', 'no-store');
+    const user = currentUser(req);
+    return user ? res.json({ user }) : res.status(401).json({ message: 'Sessão expirada.' });
+  });
+  app.use('/api/auth/logout', (req: Request, res: Response, next: NextFunction) => {
+    if (req.method !== 'POST') return next();
+    clearSession(res);
+    res.status(204).end();
+  });
+  app.use((req: Request, res: Response, next: NextFunction) => /^\/api\/notifications\/dlq(?:\/[a-f0-9]+)?$/.test(req.path) ? deadLetters(req, res) : next());
   app.use(proxy);
   app.setGlobalPrefix('api');
-  await app.listen(process.env.PORT ?? 3000);
+  return app;
 }
-if (require.main === module) bootstrap();
+if (require.main === module) createApp().then((app) => app.listen(process.env.PORT ?? 3000));
