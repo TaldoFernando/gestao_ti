@@ -44,7 +44,9 @@ expect "$(code -X DELETE $B/sectors/$ROOT)" 409 "setor com locais não pode ser 
 c -o /dev/null -X DELETE $B/equipment/$IN_CHILD
 TAG="PAT-SMOKE-$RANDOM"
 DUP=$(c -X POST $B/equipment -H "$JSON" -d "{\"name\":\"Smoke original\",\"type\":\"Monitor\",\"assetTag\":\"$TAG\"}" | j "o.id")
-expect "$(code -X POST $B/equipment -H "$JSON" -d "{\"name\":\"Smoke copia\",\"type\":\"Monitor\",\"assetTag\":\"$TAG\"}")" 409 "patrimônio duplicado"
+# Evita expansão de chaves do Bash 3 em JSON dentro de substituição aninhada.
+DUPLICATE_JSON="{\"name\":\"Smoke copia\",\"type\":\"Monitor\",\"assetTag\":\"$TAG\"}"
+expect "$(code -X POST $B/equipment -H "$JSON" -d "$DUPLICATE_JSON")" 409 "patrimônio duplicado"
 c -o /dev/null -X DELETE $B/equipment/$DUP
 expect "$(code -X POST $B/equipment -H "$JSON" -d '{"name":"","type":"Monitor"}')" 400 "validação de entrada"
 LOC=$(c -X POST $B/sectors -H "$JSON" -d "{\"name\":\"Smoke\",\"type\":\"Departamento\",\"parentId\":\"$ADM\"}" | j "o.id")
