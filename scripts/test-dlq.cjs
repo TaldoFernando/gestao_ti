@@ -25,18 +25,21 @@ const base = 'http://localhost:3000/api';
     assert.equal((await list()).length, 2, 'listar não consome');
     const before = (await ch.checkQueue('notifications')).messageCount;
     assert.equal((await fetch(`${base}/notifications/dlq/${first[0].id}`, { method: 'POST', headers })).status, 204);
-    assert.equal((await ch.checkQueue('notifications')).messageCount, before + 1);
+    const after = (await ch.checkQueue('notifications')).messageCount;
+    assert.ok(after >= before + 1); // O outbox pode publicar outros eventos durante o teste.
     // Verifica a mensagem reprocessada sem consumir entradas de outros testes.
-    for (let i = 0; i < before + 1; i++) {
+    let foundReplay = false;
+    for (let i = 0; i < after; i++) {
       const replay = await ch.get('notifications', { noAck: false });
       if (!replay) break;
       if (JSON.parse(replay.content.toString()).protocol === protocol) {
         assert.equal(replay.properties.headers['x-attempts'], 1);
         assert.deepEqual(replay.properties.headers['x-completed-channels'], ['email']);
         assert.notEqual(replay.properties.messageId, `${protocol}-0`);
-        ch.ack(replay); break;
+        ch.ack(replay); foundReplay = true; break;
       }
     }
+    assert.ok(foundReplay, 'mensagem reprocessada está na fila principal');
     const remaining = await list(); assert.equal(remaining.length, 1);
     assert.equal((await fetch(`${base}/notifications/dlq/${remaining[0].id}`, { method: 'DELETE', headers })).status, 204);
     assert.equal((await list()).length, 0);
