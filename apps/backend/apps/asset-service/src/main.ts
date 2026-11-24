@@ -3,7 +3,7 @@ import {
   Get, Headers, HttpCode, Module, NotFoundException, Param, ParseUUIDPipe, Patch, Post, Query, StreamableFile, ValidationPipe,
 } from '@nestjs/common';
 import { BaseExceptionFilter, NestFactory } from '@nestjs/core';
-import { HealthController } from '@app/common';
+import { HealthController, httpMetrics, startMetricsServer } from '@app/common';
 import { Prisma } from '.prisma/asset';
 import { db } from './db';
 import { UsersController } from './users';
@@ -190,6 +190,7 @@ export class AppModule {}
 
 export async function createApp() {
   const app = await NestFactory.create(AppModule);
+  app.use(httpMetrics);
   app.setGlobalPrefix('api');
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }));
   app.useGlobalFilters(new PrismaErrorFilter(app.getHttpAdapter()));
@@ -198,6 +199,7 @@ export async function createApp() {
 
 async function bootstrap() {
   await seed(db);
+  startMetricsServer();
   const app = await createApp();
   await app.listen(process.env.PORT ?? 3000);
 }

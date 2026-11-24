@@ -3,3 +3,5 @@ dist/
 .env
 .playwright-mcp/
 /Claude outputs
+# Estado do deploy blue-green (cor ativa e versões), gerado pelo deploy/deploy.sh
+deploy/state/

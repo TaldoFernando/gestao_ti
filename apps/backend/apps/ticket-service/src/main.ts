@@ -9,7 +9,7 @@ import { MulterError, diskStorage } from 'multer';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { extname, resolve } from 'node:path';
-import { HealthController } from '@app/common';
+import { HealthController, httpMetrics, startMetricsServer } from '@app/common';
 import { Prisma, PrismaClient } from '.prisma/ticket';
 import { withUniqueProtocol } from './protocol';
 import { findEquipment } from './inventory';
@@ -216,11 +216,13 @@ export class AppModule {}
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.use(httpMetrics);
   app.setGlobalPrefix('api');
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
   app.useGlobalFilters(new PrismaErrorFilter(app.getHttpAdapter()), new UploadErrorFilter(app.getHttpAdapter()));
   app.enableShutdownHooks();
   startOutboxPublisher(db);
+  startMetricsServer();
   await app.listen(process.env.PORT ?? 3000);
 }
 if (require.main === module) bootstrap();
