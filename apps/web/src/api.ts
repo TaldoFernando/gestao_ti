@@ -65,11 +65,10 @@ async function send<T>(path: string, init: RequestInit & { json?: unknown } = {}
   return { body, res };
 }
 
-/** Baixa um arquivo gerado no servidor (ex.: PDF do termo) com o token, já que um link simples não manda o cabeçalho. */
+/** Baixa um arquivo gerado no servidor (ex.: PDF do termo) com o cookie da sessão e o cabeçalho anti-CSRF. */
 export async function download(path: string, fallbackName: string) {
-  const token = session()?.token;
-  const res = await fetch(`/api${path}`, { headers: token ? { authorization: `Bearer ${token}` } : {} });
-  if (res.status === 401 && token) logout();
+  const res = await fetch(`/api${path}`, { credentials: 'same-origin', headers: { 'x-requested-with': 'gestao-ti' } });
+  if (res.status === 401 && activeSession) { activeSession = null; location.assign('/login'); }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new ApiError(res.status, body.message ?? 'Não foi possível gerar o arquivo. Tente de novo.');
