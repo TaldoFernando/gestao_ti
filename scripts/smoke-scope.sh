@@ -5,13 +5,22 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 set -a; . ./.env; set +a
 B=${BASE_URL:-http://localhost:8080/api}
+# Proteção CSRF: cabeçalho não simples também em chamadas multipart públicas.
+curl() { command curl -H 'X-Requested-With: gestao-ti' "$@"; }
+login_cookie() {
+  local jar
+  jar=$(mktemp)
+  curl -s -c "$jar" -X POST "$B/auth/login" -H 'content-type: application/json' -d "{\"email\":\"$1\",\"password\":\"$2\"}" -o /dev/null
+  awk '$6 == "ti-session" {print $7}' "$jar"
+  rm -f "$jar"
+}
 j() { node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const o=JSON.parse(s||'null');console.log($1)})"; }
 expect() { [ "$1" = "$2" ] && echo "ok   $3" || { echo "FAIL $3 (esperado $2, veio $1)"; exit 1; }; }
 JSON='content-type: application/json'
-login() { curl -s -X POST $B/auth/login -H "$JSON" -d "{\"email\":\"$1\",\"password\":\"$2\"}" | j "o.token"; }
+login() { login_cookie "$1" "$2"; }
 
 T=$(login "$ADMIN_EMAIL" "$ADMIN_PASSWORD")
-c() { curl -s -H "Authorization: Bearer $T" "$@"; }
+c() { curl -s -H "Cookie: ti-session=$T" "$@"; }
 new_sector() { c -X POST $B/sectors -H "$JSON" -d "$1" | j "o.id"; }
 new_equipment() { c -X POST $B/equipment -H "$JSON" -d "{\"name\":\"$1\",\"type\":\"Monitor\",\"sectorId\":\"$2\"}" | j "o.id"; }
 
@@ -29,8 +38,8 @@ trap cleanup EXIT
 EMAIL="edu.$R@prefeitura.example"
 c -o /dev/null -X POST $B/users -H "$JSON" -d "{\"name\":\"Resp Edu\",\"email\":\"$EMAIL\",\"password\":\"senha-forte-1\",\"role\":\"RESPONSAVEL\",\"sectorId\":\"$EDU\"}"
 TR=$(login "$EMAIL" senha-forte-1)
-r() { curl -s -H "Authorization: Bearer $TR" "$@"; }
-expect "$(r $B/equipment | j "o.map(e=>e.id).sort().join()")" "$(printf '%s\n' $E1 $E2 | sort | paste -sd,)" "responsável vê exatamente a secretaria e a escola vinculada"
+r() { curl -s -H "Cookie: ti-session=$TR" "$@"; }
+expect "$(r $B/equipment | j "o.map(e=>e.id).sort().join()")" "$(printf '%s\n' $E1 $E2 | sort | paste -sd, -)" "responsável vê exatamente a secretaria e a escola vinculada"
 expect "$(r -o /dev/null -w '%{http_code}' $B/equipment/$ALHEIO)" 404 "equipamento de outro setor não abre por id"
 expect "$(r -o /dev/null -w '%{http_code}' $B/equipment/$ALHEIO/movements)" 404 "nem o histórico dele"
 expect "$(r -o /dev/null -w '%{http_code}' "$B/equipment?sectorId=$SAUDE")" 200 "filtrar por setor alheio não vaza nada..."

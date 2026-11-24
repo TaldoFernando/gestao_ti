@@ -4,6 +4,15 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 set -a; . ./.env; set +a
 B=${BASE_URL:-http://localhost:8080/api}
+# Proteção CSRF: cabeçalho não simples também em chamadas multipart públicas.
+curl() { command curl -H 'X-Requested-With: gestao-ti' "$@"; }
+login_cookie() {
+  local jar
+  jar=$(mktemp)
+  curl -s -c "$jar" -X POST "$B/auth/login" -H 'content-type: application/json' -d "{\"email\":\"$1\",\"password\":\"$2\"}" -o /dev/null
+  awk '$6 == "ti-session" {print $7}' "$jar"
+  rm -f "$jar"
+}
 j() { node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const o=JSON.parse(s||'null');console.log($1)})"; }
 expect() { [ "$1" = "$2" ] && echo "ok   $3" || { echo "FAIL $3 (esperado $2, veio $1)"; exit 1; }; }
 JSON='content-type: application/json'
@@ -20,14 +29,14 @@ P=$(curl -s -X POST $B/tickets -F requesterName=Maria -F email=maria@exemplo.com
 expect "$(curl -s -o /dev/null -w '%{http_code}' -X POST $B/tickets -F requesterName=X -F email=a@b.com -F whatsapp='83999990000' -F equipmentTag=PAT-99999 -F title=T -F description=D)" 400 "patrimônio inexistente é recusado"
 expect "$(curl -s -o /dev/null -w '%{http_code}' -X POST $B/tickets -F requesterName=X -F email=ruim -F whatsapp=1 -F title=T -F description=D)" 400 "validação do formulário"
 expect "$(curl -s -o /dev/null -w '%{http_code}' -X POST $B/tickets -F requesterName=X -F email=a@b.com -F whatsapp='83999990000' -F title=T -F description=D -F files=@"$TMP/virus.exe;type=application/x-msdownload")" 400 "anexo de tipo proibido"
-PUB=$(curl -s $B/tickets/protocol/${P,,})
+PUB=$(curl -s $B/tickets/protocol/$(printf '%s' "$P" | tr '[:upper:]' '[:lower:]'))
 expect "$(echo "$PUB" | j "o.status+'|'+o.sectorName")" "ABERTO|$SECTOR_NAME" "acompanhamento pelo protocolo (minúsculas aceitas)"
 expect "$(echo "$PUB" | j "'email' in o || 'whatsapp' in o")" false "consulta pública não expõe dados pessoais"
 expect "$(curl -s -o /dev/null -w '%{http_code}' $B/tickets)" 401 "fila exige login"
 
 # --- Técnico
-T=$(curl -s -X POST $B/auth/login -H "$JSON" -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASSWORD\"}" | j "o.token")
-c() { curl -s -H "Authorization: Bearer $T" "$@"; }
+T=$(login_cookie "$ADMIN_EMAIL" "$ADMIN_PASSWORD")
+c() { curl -s -H "Cookie: ti-session=$T" "$@"; }
 ID=$(c "$B/tickets?q=$P" | j "o[0].id")
 EQ=$(c "$B/equipment?q=PAT-00201" | j "o[0].id")
 expect "$(c $B/tickets/$ID | j "o.equipmentId+'|'+o.equipmentTag")" "$EQ|PAT-00201" "chamado ligado ao equipamento do inventário"

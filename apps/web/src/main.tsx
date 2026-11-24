@@ -1,7 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Navigate, NavLink, Outlet, Route, Routes } from 'react-router';
-import { logout, session } from './api';
+import { logout, session, restoreSession } from './api';
 import Login from './pages/Login';
 import Overview from './pages/Overview';
 import EquipmentPage from './pages/Equipment';
@@ -10,6 +10,7 @@ import { OpenTicket, TrackTicket } from './pages/Public';
 import { TicketDetail, TicketList } from './pages/Tickets';
 import Report from './pages/Report';
 import Users from './pages/Users';
+import Notifications from './pages/Notifications';
 import Profile from './pages/Profile';
 import './index.css';
 
@@ -28,6 +29,7 @@ function Layout() {
           <NavLink to="/equipamentos" className={link}>Equipamentos</NavLink>
           <NavLink to="/setores" className={link}>Setores</NavLink>
           {s.user.role === 'TECNICO' && <NavLink to="/usuarios" className={link}>Usuários</NavLink>}
+          {s.user.role === 'TECNICO' && <NavLink to="/notificacoes" className={link}>Notificações</NavLink>}
           <NavLink to="/perfil" className={link}>Meu perfil</NavLink>
         </nav>
         <div className="ml-auto text-sm md:ml-0 md:mt-auto">
@@ -42,7 +44,7 @@ function Layout() {
   );
 }
 
-createRoot(document.getElementById('root')!).render(
+restoreSession().catch(() => undefined).then(() => createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
       <Routes>
@@ -53,6 +55,7 @@ createRoot(document.getElementById('root')!).render(
           <Route index element={<Overview />} />
           <Route path="equipamentos" element={<EquipmentPage />} />
           <Route path="setores" element={<SectorsPage />} />
+          <Route path="notificacoes" element={<Notifications />} />
           <Route path="perfil" element={<Profile />} />
           <Route path="chamados" element={<TicketList />} />
           <Route path="chamados/:id" element={<TicketDetail />} />
@@ -63,4 +66,4 @@ createRoot(document.getElementById('root')!).render(
       </Routes>
     </BrowserRouter>
   </StrictMode>,
-);
+));

@@ -75,3 +75,27 @@ O limite de login (5/min por IP) vale para os scripts também. Entre rodadas seg
 
 - Testes de interface automatizados no navegador. As telas foram verificadas manualmente com o Playwright durante o desenvolvimento, sem uma suíte.
 - Carga com múltiplas réplicas dos serviços: o rate limit e o publisher do outbox assumem uma instância (ADRs 0003 e 0004).
+
+## Validação das issues de TaldoFernando — 23/11/2026
+
+- `npm run lint`, 30 testes Jest e build dos quatro serviços passaram.
+- O build TypeScript/Vite do front passou.
+- A stack completa foi construída e executada em Compose isolado.
+- `smoke-tickets.sh`, `smoke-scope.sh` e `smoke-notify.sh` validaram chamados,
+  anexos, privacidade, escopo, movimentações, outbox, retry e DLQ.
+- `smoke-operations.sh` valida a importação em Postgres (simulação sem escrita,
+  aplicação, repetição idempotente, duplicados, conflito e rollback de setores)
+  e as operações reais de DLQ com confirmação RabbitMQ e proteção CSRF.
+- A API do WhatsApp foi testada com respostas simuladas, inclusive HTTP 429 e
+  falhas independentes de SMTP. Não houve envio real nem cobrança no provedor.
+
+Para repetir os novos testes após subir a stack de teste:
+
+```sh
+./scripts/smoke-operations.sh
+```
+
+Esse script pausa e religa o worker; execute os smoke tests em sequência, em
+ambiente de teste. O teste de importação cria e remove somente seus dados
+identificados por UUID. `COOKIE_SECURE=false` no `.env.example` permite testar
+via HTTP local; a suíte Jest verifica os atributos seguros padrão do cookie.
