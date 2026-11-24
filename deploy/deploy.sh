@@ -22,6 +22,11 @@ tag_of() { [ "$1" = blue ] && echo "$BLUE_TAG" || echo "$GREEN_TAG"; }
 services() { echo "web-$1 gateway-$1 ticket-service-$1 asset-service-$1"; }
 log() { echo "[deploy] $*"; }
 
+# Bancos, broker e SMTP compartilhados. Nada depende do mailpit, então ele precisa subir explicitamente.
+start_shared() {
+  dc up -d --wait postgres-tickets postgres-assets rabbitmq mailpit
+}
+
 # Sobe a cor (e o que ela precisa), espera ficar saudável e testa ponta a ponta pelo nginx dela.
 start_color() {
   local color=$1
@@ -67,6 +72,7 @@ case "${1:-}" in
     previous=$(other "$ACTIVE")
     [ "$(tag_of "$previous")" != none ] || { echo "A cor $previous nunca recebeu uma versão."; exit 1; }
     old=$ACTIVE
+    start_shared
     start_color "$previous"
     switch_to "$previous"
     WORKER_TAG=$(tag_of "$previous"); save
@@ -82,6 +88,7 @@ case "${1:-}" in
     if [ "$target" = blue ]; then BLUE_TAG=$tag; else GREEN_TAG=$tag; fi
     save
     old=$ACTIVE
+    start_shared
     start_color "$target"   # as migrações do Prisma rodam aqui, com a versão antiga ainda no ar (ADR 0008)
     switch_to "$target"
     WORKER_TAG=$tag; save
