@@ -170,3 +170,17 @@ CI (GitHub Actions): checagem de tipos, testes unitários e build do back e do f
   - transporte de microsserviços do Nest, substituído por `amqplib` para controlar o retry;
   - um serviço de autenticação separado (ADR 0007).
 - **Avaliação:** acelerou muito a parte repetitiva (CRUD, DTOs, telas). As decisões de arquitetura foram definidas e aprovadas  pelos integrantes do projeto. Todo o código foi testado no ambiente real antes de entrar no repositório.
+### Assistência nesta rodada — OpenAI Codex
+
+O Codex foi usado, a pedido de TaldoFernando, para consultar suas issues, implementar
+sessão em cookie e proteção CSRF, operação da DLQ, integração configurável com a API
+oficial do WhatsApp, importação CSV e testes. Também preparou documentação operacional
+e um registro de pendências externas. Não realizou entrevistas nem contato com o
+professor e não produziu depoimentos pessoais dos integrantes. A avaliação individual
+sobre o uso da ferramenta deve ser escrita pelo próprio integrante após revisar o PR.
+
+## Operação das novas funcionalidades
+
+Veja [sessão, DLQ, WhatsApp e importação de patrimônio](docs/operacao-issues.md) para
+configuração, exemplos e limitações. As etapas que dependem da equipe, do Setor de TI
+e do professor estão em [pendências da equipe](docs/pendencias-equipe.md).

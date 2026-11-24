@@ -23,7 +23,7 @@ export async function assertTopology(ch: Channel) {
   await ch.assertQueue(DLQ, { durable: true });
 }
 
-export type TicketEvent =
+export type TicketEvent = { whatsapp?: string } & (
   | { type: 'ticket.created'; protocol: string; title: string; email: string; requesterName: string }
   | { type: 'ticket.status_changed'; protocol: string; title: string; email: string; requesterName: string; status: string }
-  | { type: 'ticket.replied'; protocol: string; title: string; email: string; requesterName: string; message: string };
+  | { type: 'ticket.replied'; protocol: string; title: string; email: string; requesterName: string; message: string });

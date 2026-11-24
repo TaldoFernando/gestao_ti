@@ -27,6 +27,7 @@ services:
     environment:
       TICKET_SERVICE_URL: http://ticket-service:3000
       ASSET_SERVICE_URL: http://asset-service:3000
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672
       RATE_LIMIT_OFF: ${RATE_LIMIT_OFF:-0}
     depends_on: [ticket-service, asset-service]
 
@@ -59,7 +60,7 @@ services:
       RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
-      PUBLIC_URL: http://localhost:8080
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8080}
     depends_on:
       rabbitmq: { condition: service_healthy }
 

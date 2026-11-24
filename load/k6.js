@@ -22,13 +22,13 @@ export const options = {
 };
 
 export function setup() {
-  const login = http.post(`${BASE}/auth/login`, JSON.stringify({ email: __ENV.ADMIN_EMAIL, password: __ENV.ADMIN_PASSWORD }), { headers: { 'content-type': 'application/json' } });
-  const created = http.post(`${BASE}/tickets`, { requesterName: 'Carga', email: 'carga@exemplo.com', whatsapp: '83999990000', title: 'Teste de carga', description: 'k6' });
-  return { token: login.json('token'), protocol: created.json('protocol') };
+  const login = http.post(`${BASE}/auth/login`, JSON.stringify({ email: __ENV.ADMIN_EMAIL, password: __ENV.ADMIN_PASSWORD }), { headers: { 'content-type': 'application/json', 'X-Requested-With': 'gestao-ti' } });
+  const created = http.post(`${BASE}/tickets`, { requesterName: 'Carga', email: 'carga@exemplo.com', whatsapp: '83999990000', title: 'Teste de carga', description: 'k6' }, { headers: { 'X-Requested-With': 'gestao-ti' } });
+  return { cookie: login.cookies['ti-session'][0].value, protocol: created.json('protocol') };
 }
 
 export function openTicket() {
-  const res = http.post(`${BASE}/tickets`, { requesterName: 'Carga', email: 'carga@exemplo.com', whatsapp: '83999990000', title: 'Teste de carga', description: 'k6' });
+  const res = http.post(`${BASE}/tickets`, { requesterName: 'Carga', email: 'carga@exemplo.com', whatsapp: '83999990000', title: 'Teste de carga', description: 'k6' }, { headers: { 'X-Requested-With': 'gestao-ti' } });
   check(res, { '201': (r) => r.status === 201 });
 }
 
@@ -37,5 +37,5 @@ export function track(data) {
 }
 
 export function inventory(data) {
-  check(http.get(`${BASE}/equipment`, { headers: { authorization: `Bearer ${data.token}` } }), { '200': (r) => r.status === 200 });
+  check(http.get(`${BASE}/equipment`, { headers: { Cookie: `ti-session=${data.cookie}` } }), { '200': (r) => r.status === 200 });
 }

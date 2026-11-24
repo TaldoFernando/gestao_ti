@@ -37,6 +37,7 @@ jobs:
       - run: ./scripts/smoke-tickets.sh
       - run: ./scripts/smoke-scope.sh
       - run: ./scripts/smoke-notify.sh
+      - run: ./scripts/smoke-operations.sh
       # Zera o limitador de login (memória do gateway) antes do teste que termina bloqueando o login.
       - run: docker compose restart gateway && docker compose up -d --wait gateway
       - run: ./scripts/smoke-assets.sh

@@ -17,19 +17,19 @@ export type Equipment = {
   sectorId: string | null;
 };
 
-// ponytail: token no localStorage; trocar por cookie httpOnly se houver XSS de terceiros no front.
-const KEY = 'ti-session';
+let activeSession: { user: User } | null = null;
+// Remove tokens deixados por versões anteriores.
+localStorage.removeItem('ti-session');
+export const session = () => activeSession;
 
-export function session(): { token: string; user: User } | null {
-  try {
-    return JSON.parse(localStorage.getItem(KEY) ?? 'null');
-  } catch {
-    return null;
-  }
+export async function restoreSession() {
+  const res = await fetch('/api/auth/session', { credentials: 'same-origin' });
+  if (res.ok) activeSession = await res.json();
 }
 
-export function logout() {
-  localStorage.removeItem(KEY);
+export async function logout() {
+  await api('/auth/logout', { method: 'POST' });
+  activeSession = null;
   location.assign('/login');
 }
 
@@ -52,11 +52,10 @@ export async function apiPage<T>(path: string): Promise<{ items: T[]; total: num
 async function send<T>(path: string, init: RequestInit & { json?: unknown } = {}): Promise<{ body: T; res: Response }> {
   const { json, ...rest } = init;
   const headers = new Headers(rest.headers);
-  const token = session()?.token;
-  if (token) headers.set('authorization', `Bearer ${token}`);
+  headers.set('x-requested-with', 'gestao-ti');
   if (json !== undefined) headers.set('content-type', 'application/json');
-  const res = await fetch(`/api${path}`, { ...rest, headers, body: json !== undefined ? JSON.stringify(json) : rest.body });
-  if (res.status === 401 && token) logout();
+  const res = await fetch(`/api${path}`, { ...rest, credentials: 'same-origin', headers, body: json !== undefined ? JSON.stringify(json) : rest.body });
+  if (res.status === 401 && activeSession) { activeSession = null; location.assign('/login'); }
   if (res.status === 204) return { body: undefined as T, res };
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -67,8 +66,8 @@ async function send<T>(path: string, init: RequestInit & { json?: unknown } = {}
 }
 
 export async function login(email: string, password: string) {
-  const data = await api<{ token: string; user: User }>('/auth/login', { method: 'POST', json: { email, password } });
-  localStorage.setItem(KEY, JSON.stringify(data));
+  const data = await api<{ user: User }>('/auth/login', { method: 'POST', json: { email, password } });
+  activeSession = data;
 }
 
 // Caminho "Setor › Local", como no protótipo.

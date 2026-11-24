@@ -6,6 +6,8 @@ const PUBLIC: [string, RegExp][] = [
   ['POST', /^\/api\/tickets$/],                    // cidadão abre chamado sem login
   ['GET', /^\/api\/tickets\/protocol\/[\w-]+$/],   // cidadão acompanha pelo protocolo
   ['GET', /^\/api\/health$/],
+  ['GET', /^\/api\/auth\/session$/],
+  ['POST', /^\/api\/auth\/logout$/],
   ['GET', /^\/api\/sectors$/],                     // lista de setores do formulário público
 ];
 

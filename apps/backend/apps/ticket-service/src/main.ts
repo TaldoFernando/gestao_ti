@@ -16,8 +16,8 @@ import { findEquipment } from './inventory';
 import { CreateEventDto, CreateTicketDto, UpdateTicketDto } from './dto';
 import { enqueue, startOutboxPublisher } from './outbox';
 
-const notifyFields = (t: { protocol: string; title: string; email: string; requesterName: string }) => ({
-  protocol: t.protocol, title: t.title, email: t.email, requesterName: t.requesterName,
+const notifyFields = (t: { protocol: string; title: string; email: string; requesterName: string; whatsapp: string }) => ({
+  protocol: t.protocol, title: t.title, email: t.email, requesterName: t.requesterName, whatsapp: t.whatsapp,
 });
 
 const db = new PrismaClient();

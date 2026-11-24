@@ -4,6 +4,15 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 set -a; . ./.env; set +a
 B=${BASE_URL:-http://localhost:8080/api}
+# Proteção CSRF: cabeçalho não simples também em chamadas multipart públicas.
+curl() { command curl -H 'X-Requested-With: gestao-ti' "$@"; }
+login_cookie() {
+  local jar
+  jar=$(mktemp)
+  curl -s -c "$jar" -X POST "$B/auth/login" -H 'content-type: application/json' -d "{\"email\":\"$1\",\"password\":\"$2\"}" -o /dev/null
+  awk '$6 == "ti-session" {print $7}' "$jar"
+  rm -f "$jar"
+}
 j() { node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const o=JSON.parse(s||'null');console.log($1)})"; }
 expect() { [ "$1" = "$2" ] && echo "ok   $3" || { echo "FAIL $3 (esperado $2, veio $1)"; exit 1; }; }
 JSON='content-type: application/json'
@@ -11,8 +20,8 @@ JSON='content-type: application/json'
 # --- Autenticação
 expect "$(curl -s -o /dev/null -w '%{http_code}' $B/equipment)" 401 "inventário exige login"
 expect "$(curl -s -o /dev/null -w '%{http_code}' -X POST $B/auth/login -H "$JSON" -d '{"email":"x@x.com","password":"errada"}')" 401 "senha errada"
-T=$(curl -s -X POST $B/auth/login -H "$JSON" -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASSWORD\"}" | j "o.token")
-c() { curl -s -H "Authorization: Bearer $T" "$@"; }
+T=$(login_cookie "$ADMIN_EMAIL" "$ADMIN_PASSWORD")
+c() { curl -s -H "Cookie: ti-session=$T" "$@"; }
 code() { c -o /dev/null -w "%{http_code}" "$@"; }
 expect "$(code $B/equipment)" 200 "técnico logado lê inventário"
 expect "$(curl -s -o /dev/null -w '%{http_code}' -H 'x-user-role: TECNICO' $B/equipment)" 401 "cabeçalho forjado não autentica"
@@ -20,9 +29,9 @@ expect "$(curl -s -o /dev/null -w '%{http_code}' -H 'x-user-role: TECNICO' $B/eq
 # --- Perfil responsável (só leitura)
 EMAIL="resp.$RANDOM@prefeitura.example"
 c -o /dev/null -X POST $B/users -H "$JSON" -d "{\"name\":\"Resp\",\"email\":\"$EMAIL\",\"password\":\"senha-forte-1\",\"role\":\"RESPONSAVEL\"}"
-TR=$(curl -s -X POST $B/auth/login -H "$JSON" -d "{\"email\":\"$EMAIL\",\"password\":\"senha-forte-1\"}" | j "o.token")
-expect "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TR" $B/equipment)" 200 "responsável lê inventário"
-expect "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TR" -X POST $B/equipment -H "$JSON" -d '{"name":"X","type":"Y"}')" 403 "responsável não cadastra"
+TR=$(login_cookie "$EMAIL" "senha-forte-1")
+expect "$(curl -s -o /dev/null -w '%{http_code}' -H "Cookie: ti-session=$TR" $B/equipment)" 200 "responsável lê inventário"
+expect "$(curl -s -o /dev/null -w '%{http_code}' -H "Cookie: ti-session=$TR" -X POST $B/equipment -H "$JSON" -d '{"name":"X","type":"Y"}')" 403 "responsável não cadastra"
 
 # --- Regras do inventário
 # Cria os próprios setores e equipamentos: não depende dos dados de exemplo, que podem ter sido alterados.
@@ -35,7 +44,9 @@ expect "$(code -X DELETE $B/sectors/$ROOT)" 409 "setor com locais não pode ser 
 c -o /dev/null -X DELETE $B/equipment/$IN_CHILD
 TAG="PAT-SMOKE-$RANDOM"
 DUP=$(c -X POST $B/equipment -H "$JSON" -d "{\"name\":\"Smoke original\",\"type\":\"Monitor\",\"assetTag\":\"$TAG\"}" | j "o.id")
-expect "$(code -X POST $B/equipment -H "$JSON" -d "{\"name\":\"Smoke copia\",\"type\":\"Monitor\",\"assetTag\":\"$TAG\"}")" 409 "patrimônio duplicado"
+# Evita expansão de chaves do Bash 3 em JSON dentro de substituição aninhada.
+DUPLICATE_JSON="{\"name\":\"Smoke copia\",\"type\":\"Monitor\",\"assetTag\":\"$TAG\"}"
+expect "$(code -X POST $B/equipment -H "$JSON" -d "$DUPLICATE_JSON")" 409 "patrimônio duplicado"
 c -o /dev/null -X DELETE $B/equipment/$DUP
 expect "$(code -X POST $B/equipment -H "$JSON" -d '{"name":"","type":"Monitor"}')" 400 "validação de entrada"
 LOC=$(c -X POST $B/sectors -H "$JSON" -d "{\"name\":\"Smoke\",\"type\":\"Departamento\",\"parentId\":\"$ADM\"}" | j "o.id")
