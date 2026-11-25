@@ -85,4 +85,4 @@ export function equipmentIn(sectorId: string, sectors: Sector[], equipment: Equi
 }
 
 export type Movement = { id: string; fromName: string | null; toName: string | null; byName: string; at: string };
-export type AppUser = { id: string; name: string; email: string; role: Role; sectorId: string | null };
+export type AppUser = { id: string; name: string; email: string; role: Role; sectorId: string | null; active: boolean };

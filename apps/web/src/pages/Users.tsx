@@ -7,6 +7,7 @@ export default function Users() {
   const { sectors } = useInventory();
   const [users, setUsers] = useState<AppUser[]>([]);
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<AppUser | null>(null);
   const [error, setError] = useState('');
   const [formError, setFormError] = useState('');
   const [search, setSearch] = useState('');
@@ -25,11 +26,34 @@ export default function Users() {
     e.preventDefault();
     const f = Object.fromEntries(new FormData(e.currentTarget)) as Record<string, string>;
     try {
-      await api('/users', { method: 'POST', json: { ...f, sectorId: f.sectorId || undefined } });
+      if (editing) {
+        await api(`/users/${editing.id}`, {
+          method: 'PATCH',
+          json: {
+            name: f.name,
+            email: f.email,
+            role: f.role,
+            sectorId: f.sectorId || null,
+            ...(f.password ? { password: f.password } : {}),
+          },
+        });
+      } else {
+        await api('/users', { method: 'POST', json: { ...f, sectorId: f.sectorId || undefined } });
+      }
       setOpen(false);
+      setEditing(null);
       load();
     } catch (err) {
       setFormError((err as Error).message);
+    }
+  }
+
+  async function toggleActive(user: AppUser) {
+    try {
+      await api(`/users/${user.id}`, { method: 'PATCH', json: { active: !user.active } });
+      await load();
+    } catch (err) {
+      setError((err as Error).message);
     }
   }
 
@@ -55,25 +79,30 @@ export default function Users() {
           <li key={u.id} className="grid gap-x-6 border-b border-line py-4 md:grid-cols-[1fr_1fr_auto]">
             <span><span className="font-medium">{u.name}</span><span className="block text-sm text-muted">{u.email}</span></span>
             <span className="text-muted">{u.role === 'TECNICO' ? 'Técnico de TI' : `Responsável · ${sectorPath(sectors, u.sectorId) || 'sem setor'}`}</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`text-sm ${u.active ? 'text-[#28613b]' : 'text-muted'}`}>{u.active ? 'Ativo' : 'Desativado'}</span>
+              <Button onClick={() => { setFormError(''); setEditing(u); setOpen(true); }}>Editar</Button>
+              <Button onClick={() => toggleActive(u)}>{u.active ? 'Desativar' : 'Reativar'}</Button>
+            </div>
           </li>
         ))}
       </ul>
       <Pager page={paged.page} pages={paged.pages} total={rows.length} onChange={paged.setPage} />
 
-      <Dialog open={open} onClose={() => setOpen(false)} title="Cadastrar usuário">
+      <Dialog open={open} onClose={() => { setOpen(false); setEditing(null); }} title={editing ? 'Editar usuário' : 'Cadastrar usuário'}>
         <form key={String(open)} onSubmit={submit} className="grid gap-4">
-          <Field label="Nome"><input name="name" required maxLength={80} className={input} /></Field>
-          <Field label="E-mail"><input name="email" type="email" required className={input} /></Field>
-          <Field label="Senha inicial (mín. 8 caracteres)"><input name="password" type="password" required minLength={8} autoComplete="new-password" className={input} /></Field>
+          <Field label="Nome"><input name="name" required maxLength={80} defaultValue={editing?.name} className={input} /></Field>
+          <Field label="E-mail"><input name="email" type="email" required defaultValue={editing?.email} className={input} /></Field>
+          <Field label={editing ? 'Redefinir senha (opcional, mín. 8 caracteres)' : 'Senha inicial (mín. 8 caracteres)'}><input name="password" type="password" required={!editing} minLength={8} autoComplete="new-password" className={input} /></Field>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Perfil">
-              <select name="role" className={input} defaultValue="RESPONSAVEL">
+              <select name="role" className={input} defaultValue={editing?.role ?? 'RESPONSAVEL'}>
                 <option value="RESPONSAVEL">Responsável do setor</option>
                 <option value="TECNICO">Técnico de TI</option>
               </select>
             </Field>
             <Field label="Setor (responsável)">
-              <select name="sectorId" className={input} defaultValue="">
+              <select name="sectorId" className={input} defaultValue={editing?.sectorId ?? ''}>
                 <option value="">Nenhum</option>
                 <SectorOptions sectors={sectors} />
               </select>
@@ -82,7 +111,7 @@ export default function Users() {
           <ErrorText>{formError}</ErrorText>
           <div className="mt-2 flex justify-end gap-2">
             <Button type="button" onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button variant="primary">Salvar usuário</Button>
+            <Button variant="primary">{editing ? 'Salvar alterações' : 'Salvar usuário'}</Button>
           </div>
         </form>
       </Dialog>
