@@ -1,7 +1,8 @@
 import { Logger } from '@nestjs/common';
 import { connect, type ConsumeMessage } from 'amqplib';
 import { createTransport } from 'nodemailer';
-import { DLQ, MAX_ATTEMPTS, QUEUE, RETRY_QUEUE, assertTopology, type TicketEvent } from '@app/common';
+import { Counter } from 'prom-client';
+import { DLQ, MAX_ATTEMPTS, QUEUE, RETRY_QUEUE, assertTopology, registry, startMetricsServer, type TicketEvent } from '@app/common';
 import { deliver } from './delivery';
 import { SeenIds } from './dedup';
 import { sendWhatsApp } from './whatsapp';
@@ -15,6 +16,10 @@ const mailer = createTransport({
   connectionTimeout: 5000,
 });
 const FROM = process.env.MAIL_FROM ?? 'TI Prefeitura <ti@prefeitura.example>';
+// Desfecho de cada mensagem: enviada, repetida (ignorada), reenviada para retry ou para a DLQ.
+const processed = new Counter({ name: 'notifications_processed_total', help: 'Mensagens de notificação processadas, por desfecho.', labelNames: ['result'], registers: [registry] });
+// Séries começam em zero: o painel mostra a linha desde o início, mesmo antes da primeira mensagem.
+for (const result of ['enviada', 'repetida', 'retry', 'dlq']) processed.inc({ result }, 0);
 
 async function start() {
   const conn = await connect(process.env.RABBITMQ_URL ?? 'amqp://guest:guest@localhost:5672');
@@ -38,6 +43,7 @@ async function start() {
     const id: string | undefined = msg.properties.messageId;
     if (id && seen.has(id)) {
       log.warn(`mensagem repetida ignorada (${id})`);
+      processed.inc({ result: 'repetida' });
       ch.ack(msg);
       return;
     }
@@ -52,6 +58,7 @@ async function start() {
         process.env.WHATSAPP_ENABLED === 'true' ? () => sendWhatsApp(event) : undefined,
       );
       log.log(`${event.type} ${event.protocol}: canais enviados`);
+      processed.inc({ result: 'enviada' });
     } catch (e) {
       // Não enviou: libera o id para a nova tentativa (retry) passar.
       if (id) seen.delete(id);
@@ -63,6 +70,7 @@ async function start() {
         headers: { ...msg.properties.headers, 'x-completed-channels': completed, 'x-attempts': target === DLQ ? attempt : attempt + 1, 'x-last-error': (e as Error).message },
       });
       await ch.waitForConfirms();
+      processed.inc({ result: target === DLQ ? 'dlq' : 'retry' });
       log.warn(`tentativa ${attempt}/${MAX_ATTEMPTS} falhou (${(e as Error).message}) → ${target}`);
     }
     ch.ack(msg);
@@ -70,6 +78,7 @@ async function start() {
   log.log(`consumindo ${QUEUE}`);
 }
 
+startMetricsServer();
 start().catch((e) => {
   log.error(`não conectou ao RabbitMQ: ${e.message}`);
   process.exit(1);

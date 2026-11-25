@@ -65,6 +65,21 @@ async function send<T>(path: string, init: RequestInit & { json?: unknown } = {}
   return { body, res };
 }
 
+/** Baixa um arquivo gerado no servidor (ex.: PDF do termo) com o cookie da sessão e o cabeçalho anti-CSRF. */
+export async function download(path: string, fallbackName: string) {
+  const res = await fetch(`/api${path}`, { credentials: 'same-origin', headers: { 'x-requested-with': 'gestao-ti' } });
+  if (res.status === 401 && activeSession) { activeSession = null; location.assign('/login'); }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, body.message ?? 'Não foi possível gerar o arquivo. Tente de novo.');
+  }
+  const name = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') ?? '')?.[1] ?? fallbackName;
+  const url = URL.createObjectURL(await res.blob());
+  const a = Object.assign(document.createElement('a'), { href: url, download: name });
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
 export async function login(email: string, password: string) {
   const data = await api<{ user: User }>('/auth/login', { method: 'POST', json: { email, password } });
   activeSession = data;
