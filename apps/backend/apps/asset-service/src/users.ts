@@ -1,5 +1,5 @@
-import { Body, Controller, Get, Headers, HttpCode, Patch, Post, UnauthorizedException } from '@nestjs/common';
-import { IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
+import { Body, Controller, Get, Headers, HttpCode, NotFoundException, Param, ParseUUIDPipe, Patch, Post, UnauthorizedException } from '@nestjs/common';
+import { IsBoolean, IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { db } from './db';
 
@@ -34,7 +34,16 @@ class UpdateProfileDto {
   @IsOptional() @IsString() @MinLength(8) password?: string;
 }
 
-const publicFields = { id: true, name: true, email: true, role: true, sectorId: true };
+class UpdateUserDto {
+  @IsOptional() @IsString() @IsNotEmpty() @MaxLength(80) name?: string;
+  @IsOptional() @IsEmail() email?: string;
+  @IsOptional() @IsEnum(['TECNICO', 'RESPONSAVEL']) role?: 'TECNICO' | 'RESPONSAVEL';
+  @IsOptional() @IsUUID() sectorId?: string | null;
+  @IsOptional() @IsBoolean() active?: boolean;
+  @IsOptional() @IsString() @MinLength(8) password?: string;
+}
+
+const publicFields = { id: true, name: true, email: true, role: true, sectorId: true, active: true };
 
 // /auth/verify é interno: o gateway não expõe essa rota, só a chama no login.
 @Controller()
@@ -42,8 +51,16 @@ export class UsersController {
   @Post('auth/verify') @HttpCode(200)
   async verify(@Body() dto: LoginDto) {
     const user = await db.user.findUnique({ where: { email: dto.email.toLowerCase() } });
-    if (!user || !checkPassword(dto.password, user.passwordHash)) throw new UnauthorizedException('E-mail ou senha inválidos.');
+    if (!user || !user.active || !checkPassword(dto.password, user.passwordHash)) throw new UnauthorizedException('E-mail ou senha inválidos.');
     return { id: user.id, name: user.name, email: user.email, role: user.role, sectorId: user.sectorId };
+  }
+
+  // Consultado pelo gateway em cada requisição para invalidar imediatamente a sessão de usuário desativado.
+  @Get('auth/status/:id')
+  async status(@Param('id', ParseUUIDPipe) id: string) {
+    const user = await db.user.findUnique({ where: { id }, select: { active: true } });
+    if (!user) throw new NotFoundException('Usuário não encontrado.');
+    return user;
   }
 
   @Get('users')
@@ -76,5 +93,19 @@ export class UsersController {
   @Post('users')
   create(@Body() { password, ...dto }: CreateUserDto) {
     return db.user.create({ data: { ...dto, email: dto.email.toLowerCase(), passwordHash: hashPassword(password) }, select: publicFields });
+  }
+
+  @Patch('users/:id')
+  async update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateUserDto) {
+    const { password, ...fields } = dto;
+    return db.user.update({
+      where: { id },
+      data: {
+        ...fields,
+        ...(fields.email ? { email: fields.email.toLowerCase() } : {}),
+        ...(password ? { passwordHash: hashPassword(password) } : {}),
+      },
+      select: publicFields,
+    });
   }
 }

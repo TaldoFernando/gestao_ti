@@ -54,6 +54,7 @@ model User {
   name         String
   email        String   @unique
   passwordHash String
+  active       Boolean  @default(true)
   role         Role
   // Responsável enxerga só o próprio setor (etapa 7).
   sectorId     String?
