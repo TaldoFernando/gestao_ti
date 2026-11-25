@@ -56,7 +56,7 @@ export default function SectorsPage() {
                 </p>
                 {root.description && <p className="mt-1 text-sm">{root.description}</p>}
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex max-w-full flex-wrap items-center justify-end gap-1">
                 <Link to={`/setores/${root.id}/relatorio`} className="flex h-9 items-center px-3 text-sm font-medium underline-offset-4 hover:underline">Relatório</Link>
                 {canEdit && (
                   <>
@@ -71,13 +71,13 @@ export default function SectorsPage() {
             {children.length > 0 && (
               <ul className="mt-5 grid gap-2 md:grid-cols-2">
                 {children.map((c) => (
-                  <li key={c.id} className="flex items-center justify-between gap-3 rounded-md bg-[#f4f4f4] px-4 py-3">
+                  <li key={c.id} className="flex flex-wrap items-start justify-between gap-3 rounded-md bg-[#f4f4f4] px-4 py-3">
                     <Link to={`/equipamentos?setor=${c.id}`} className="group min-w-0">
                       <p className="font-mono text-xs lowercase text-muted">{c.type}</p>
                       <p className="truncate font-medium group-hover:underline">{c.name}</p>
                       <p className="text-sm text-muted"><span className="font-mono">{countOf(c.id)}</span> {countOf(c.id) === 1 ? 'equipamento' : 'equipamentos'}</p>
                     </Link>
-                    <div className="flex shrink-0 items-center">
+                    <div className="flex max-w-full flex-wrap items-center justify-end">
                       <Link to={`/setores/${c.id}/relatorio`} className="flex h-9 items-center px-3 text-sm font-medium underline-offset-4 hover:underline">Relatório</Link>
                       {canEdit && (
                         <>
