@@ -31,7 +31,8 @@ export default function Report() {
         <p className="mt-3 text-sm text-muted">Emitido em {today} · <span className="font-mono">{items.length}</span> {items.length === 1 ? 'item' : 'itens'}</p>
       </header>
 
-      <table className="mt-6 w-full border-collapse text-left text-sm">
+      <div className="mt-6 w-full overflow-x-auto print:overflow-visible">
+      <table className="min-w-[640px] w-full border-collapse text-left text-sm print:min-w-0">
         <thead>
           <tr className="border-b border-ink text-xs text-muted">
             {['Patrimônio', 'Equipamento', 'Tipo', 'Série', 'Vínculo', 'Local'].map((h) => <th key={h} className="py-2 pr-4 font-medium">{h}</th>)}
@@ -50,6 +51,7 @@ export default function Report() {
           ))}
         </tbody>
       </table>
+      </div>
       {!items.length && <p className="py-10 text-center text-muted">Nenhum equipamento registrado neste setor.</p>}
 
       <footer className="mt-20 grid grid-cols-2 gap-16 text-center text-sm break-inside-avoid">
