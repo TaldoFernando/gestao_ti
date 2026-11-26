@@ -23,13 +23,17 @@ services:
   gateway:
     <<: *backend
     build: { context: ./apps/backend, args: { APP: gateway } }
-    ports: ["3000:3000"]
+    expose: ["3000"]
     environment:
       TICKET_SERVICE_URL: http://ticket-service:3000
       ASSET_SERVICE_URL: http://asset-service:3000
       RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672
+      REDIS_URL: redis://redis:6379
       RATE_LIMIT_OFF: ${RATE_LIMIT_OFF:-0}
-    depends_on: [ticket-service, asset-service]
+    depends_on:
+      ticket-service: { condition: service_started }
+      asset-service: { condition: service_started }
+      redis: { condition: service_healthy }
 
   ticket-service:
     <<: *backend
@@ -83,6 +87,13 @@ services:
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
       retries: 10
 
   mailpit:
