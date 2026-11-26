@@ -10,12 +10,7 @@ let app: INestApplication;
 const originalFetch = global.fetch;
 beforeAll(async () => { app = await createApp(); await app.init(); });
 afterAll(async () => { await app.close(); global.fetch = originalFetch; });
-beforeEach(() => {
-  global.fetch = jest.fn().mockImplementation(async (input: RequestInfo | URL) => ({
-    ok: true,
-    json: async () => String(input).includes('/api/auth/status/') ? { active: true } : user,
-  } as Response));
-});
+beforeEach(() => { global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => user }); });
 
 it('login guarda JWT somente em cookie seguro e restaura sessão após recarregar', async () => {
   const res = await request(app.getHttpServer()).post('/api/auth/login').set('X-Requested-With', 'gestao-ti').send({ email: 'x@y.com', password: 'test' }).expect(200);

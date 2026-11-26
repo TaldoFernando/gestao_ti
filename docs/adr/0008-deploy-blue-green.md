@@ -17,12 +17,12 @@
   - remover, renomear ou tornar uma coluna obrigatória fica para uma migração de *contração* num deploy seguinte, quando nenhuma versão no ar usa mais o campo. Essa migração é marcada no topo com `-- contract: <motivo>`;
   - um renome vira três passos: criar a coluna nova e gravar nas duas (N), migrar a leitura (N+1), apagar a antiga (N+2, contração);
   - o CI barra migração arriscada sem a marca (`scripts/check-migrations.sh`, no job `backend`).
-- **Por que blue-green e não rolling:** o blue-green mantém duas versões lado a lado durante a troca e funciona com Docker Compose, sem Kubernetes. O rate limit agora é compartilhado pelo Redis e o outbox permite publishers concorrentes com `SKIP LOCKED` (issue #7, ADRs 0003 e 0004).
+- **Por que blue-green e não rolling:** o rolling troca réplicas uma a uma e exige várias instâncias de cada serviço. Hoje o rate limit fica em memória e o publisher do outbox assume uma instância (issue #7, ADRs 0003 e 0004). O blue-green só mantém as duas versões lado a lado durante a troca e funciona com o Docker Compose, sem Kubernetes.
 - **Consequências:**
   - **+** Troca sem indisponibilidade, testada no CI (job `deploy`, `deploy/test-bluegreen.sh`): v1 → v2 → rollback com requisições contínuas na API e no front, exigindo **zero falhas**. O mesmo teste confirma que a sessão continua válida depois da troca.
   - **+** O servidor não compila nada: só baixa imagens que já passaram nos testes. A tag `sha-` diz exatamente qual commit está no ar (`deploy/deploy.sh status`).
   - **−** Durante a troca, alguns segundos com as duas versões ao mesmo tempo: dois publishers do outbox podem publicar o mesmo evento. O worker é um só e descarta o repetido pelo `messageId` (ADR 0004). Por isso ele não tem cor: é recriado, e as mensagens esperam na fila enquanto ele reinicia.
-  - **+** O rate limit continua consistente durante a troca, porque os gateways compartilham Redis.
+  - **−** O rate limit zera na troca, porque fica na memória do gateway.
   - **−** Precisa de memória para as duas cores durante o deploy, e a disciplina de migrações passa a ser obrigatória.
   - **−** O IP do cliente passa por dois proxies (borda e nginx do front). O gateway confia em 2 saltos em produção (`TRUST_PROXY_HOPS=2`) e em 1 no desenvolvimento. Os dois nginx acrescentam o IP no `X-Forwarded-For`, então um IP forjado pelo cliente não escapa do rate limit.
   - **Alternativas:** Kubernetes com `RollingUpdate`, que é o caminho natural com várias réplicas, mas é pesado demais para o servidor da prefeitura; Docker Swarm com `update_config: order: start-first`, que faz rolling no Compose, mas também depende de mais de uma réplica (issue #7).

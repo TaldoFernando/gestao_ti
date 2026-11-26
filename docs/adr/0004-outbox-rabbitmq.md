@@ -11,6 +11,6 @@
   - **+** Testado: com o RabbitMQ parado, o chamado abre e o e-mail sai quando o broker volta. Com o SMTP parado, a mensagem cai na DLQ após 3 falhas (`scripts/smoke-notify.sh`).
   - **−** A entrega é *pelo menos uma vez*: se o serviço cair entre o confirm e o update, o evento é publicado de novo.
   - **+** O repetido não vira e-mail duplicado: cada mensagem leva o id da linha do outbox como `messageId`, e o worker guarda os ids já enviados (`dedup.ts`, em memória, até 10 mil ids por 24 h) e ignora o repetido. Se o próprio worker reiniciar nessa janela, ele esquece os ids; a troca por Redis fica para quando houver mais de uma réplica (issue #7).
-  - **+** Réplicas do `ticket-service` reservam linhas pendentes com `SELECT ... FOR UPDATE SKIP LOCKED` e mantêm o bloqueio até a confirmação do RabbitMQ e a gravação de `publishedAt`; publishers concorrentes não pegam a mesma linha.
+  - **−** Há um publisher por instância. Com réplicas, a leitura precisa de `FOR UPDATE SKIP LOCKED`.
   - **−** A reprocessamento da DLQ é manual, pelo painel do RabbitMQ.
   - **Alternativa:** CDC com Debezium, que é mais robusto, mas exige Kafka Connect, um serviço pesado demais para o escopo.
