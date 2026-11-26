@@ -31,7 +31,6 @@ x-gateway-env: &gateway-env
   TICKET_SERVICE_URL: http://ticket-service:3000
   ASSET_SERVICE_URL: http://asset-service:3000
   RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672
-  REDIS_URL: redis://redis:6379
   TRUST_PROXY_HOPS: 2 # cliente → edge → web → gateway
 
 x-ticket-env: &ticket-env
@@ -80,7 +79,6 @@ services:
     depends_on:
       ticket-service-blue: { condition: service_healthy }
       asset-service-blue: { condition: service_healthy }
-      redis: { condition: service_healthy }
 
   ticket-service-blue:
     <<: *backend
@@ -114,7 +112,6 @@ services:
     depends_on:
       ticket-service-green: { condition: service_healthy }
       asset-service-green: { condition: service_healthy }
-      redis: { condition: service_healthy }
 
   ticket-service-green:
     <<: *backend
@@ -166,15 +163,6 @@ services:
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
-      retries: 10
-
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    networks: [shared]
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
       retries: 10
 
   # SMTP de teste da demonstração. Em produção real, aponte SMTP_HOST/SMTP_PORT no .env para o servidor da prefeitura.
