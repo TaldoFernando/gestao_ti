@@ -41,4 +41,4 @@ FAILS=$(grep -cv '^200$' "$CODES" || true)
 echo "     $TOTAL requisições durante os deploys, $FAILS com erro"
 [ "$TOTAL" -gt 200 ] && echo "ok   tráfego contínuo durante as trocas" || { echo "FAIL poucas requisições ($TOTAL)"; exit 1; }
 expect "$FAILS" 0 "nenhuma requisição falhou (zero downtime)"
-expect "$(running)" "asset-service-blue edge gateway-blue mailpit notification-worker postgres-assets postgres-tickets rabbitmq redis ticket-service-blue web-blue" "só a cor ativa fica no ar"
+expect "$(running)" "asset-service-blue edge gateway-blue mailpit notification-worker postgres-assets postgres-tickets redis rabbitmq ticket-service-blue web-blue" "só a cor ativa fica no ar"
