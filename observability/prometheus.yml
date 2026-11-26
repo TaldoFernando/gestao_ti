@@ -5,8 +5,13 @@ global:
 
 scrape_configs:
   - job_name: servicos
-    static_configs:
-      - targets: [gateway:9464, ticket-service:9464, asset-service:9464, notification-worker:9464]
+    # DNS A discovery returns one target per Compose replica, unlike a static target that
+    # resolves only one address from a replicated service name.
+    dns_sd_configs:
+      - names: [gateway, ticket-service, asset-service, notification-worker]
+        type: A
+        port: 9464
+        refresh_interval: 5s
 
   # Plugin rabbitmq_prometheus: tamanho de cada fila (notifications, .retry e .dlq).
   - job_name: rabbitmq
