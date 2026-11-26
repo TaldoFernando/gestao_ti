@@ -27,12 +27,19 @@ class PrismaErrorFilter extends BaseExceptionFilter implements ExceptionFilter {
 @Controller('sectors')
 class SectorsController {
   @Get()
-  list() {
-    return db.sector.findMany({ orderBy: { name: 'asc' }, include: { _count: { select: { equipment: true } } } });
+  async list(@Headers() h: Hdrs) {
+    const ids = await scope(h);
+    return db.sector.findMany({
+      ...(ids ? { where: { id: { in: ids } } } : {}),
+      orderBy: { name: 'asc' },
+      include: { _count: { select: { equipment: true } } },
+    });
   }
 
   @Get(':id')
-  async get(@Param('id', ParseUUIDPipe) id: string) {
+  async get(@Param('id', ParseUUIDPipe) id: string, @Headers() h: Hdrs) {
+    const ids = await scope(h);
+    if (ids && !ids.includes(id)) notFound();
     return (await db.sector.findUnique({ where: { id }, include: { children: true } })) ?? notFound();
   }
 

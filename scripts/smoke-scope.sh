@@ -21,6 +21,7 @@ login() { login_cookie "$1" "$2"; }
 
 T=$(login "$ADMIN_EMAIL" "$ADMIN_PASSWORD")
 c() { curl -s -H "Cookie: ti-session=$T" "$@"; }
+ADMIN_NAME=$(c "$B/users/me" | j "o.name")
 new_sector() { c -X POST $B/sectors -H "$JSON" -d "$1" | j "o.id"; }
 new_equipment() { c -X POST $B/equipment -H "$JSON" -d "{\"name\":\"$1\",\"type\":\"Monitor\",\"sectorId\":\"$2\"}" | j "o.id"; }
 
@@ -39,6 +40,13 @@ EMAIL="edu.$R@prefeitura.example"
 c -o /dev/null -X POST $B/users -H "$JSON" -d "{\"name\":\"Resp Edu\",\"email\":\"$EMAIL\",\"password\":\"senha-forte-1\",\"role\":\"RESPONSAVEL\",\"sectorId\":\"$EDU\"}"
 TR=$(login "$EMAIL" senha-forte-1)
 r() { curl -s -H "Cookie: ti-session=$TR" "$@"; }
+expect "$(r $B/sectors | j "o.map(s=>s.id).sort().join()")" "$(printf '%s\n' $EDU $ESCOLA | sort | paste -sd, -)" "responsável lista apenas seu setor e os locais vinculados"
+expect "$(r -o /dev/null -w '%{http_code}' $B/sectors/$EDU)" 200 "responsável abre o próprio setor"
+expect "$(r -o /dev/null -w '%{http_code}' $B/sectors/$ESCOLA)" 200 "responsável abre um local vinculado"
+expect "$(r -o /dev/null -w '%{http_code}' $B/sectors/$SAUDE)" 404 "responsável não abre setor alheio por id"
+expect "$(c $B/sectors | j "o.some(s=>s.id==='$SAUDE')")" true "técnico continua vendo todos os setores"
+expect "$(c -o /dev/null -w '%{http_code}' $B/sectors/$SAUDE)" 200 "técnico abre qualquer setor"
+expect "$(curl $B/sectors | j "o.some(s=>s.id==='$SAUDE')")" true "formulário público continua vendo todos os setores"
 expect "$(r $B/equipment | j "o.map(e=>e.id).sort().join()")" "$(printf '%s\n' $E1 $E2 | sort | paste -sd, -)" "responsável vê exatamente a secretaria e a escola vinculada"
 expect "$(r -o /dev/null -w '%{http_code}' $B/equipment/$ALHEIO)" 404 "equipamento de outro setor não abre por id"
 expect "$(r -o /dev/null -w '%{http_code}' $B/equipment/$ALHEIO/movements)" 404 "nem o histórico dele"
@@ -61,5 +69,5 @@ c -o /dev/null -X PATCH $B/equipment/$MOVED -H "$JSON" -d '{"name":"Smoke movido
 M=$(c $B/equipment/$MOVED/movements)
 expect "$(echo "$M" | j "o.length")" 2 "cadastro + 1 mudança de local (renomear não conta)"
 expect "$(echo "$M" | j "o[0].fromName+' -> '+o[0].toName")" "Smoke Educacao $R › Smoke Escola $R -> Smoke Saude $R" "origem e destino com caminho completo"
-expect "$(echo "$M" | j "o[0].byName")" Administrador "autor registrado"
+expect "$(echo "$M" | j "o[0].byName")" "$ADMIN_NAME" "autor registrado"
 expect "$(r -o /dev/null -w '%{http_code}' $B/equipment/$MOVED)" 404 "saiu do setor do responsável → some para ele"
