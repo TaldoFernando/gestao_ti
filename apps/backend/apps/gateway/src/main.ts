@@ -6,7 +6,8 @@ import { Readable } from 'node:stream';
 import { HealthController, httpMetrics, startMetricsServer } from '@app/common';
 import { deadLetters } from './dlq';
 import { COOKIE, cookieOptions, sessionToken, csrfAllowed, clearSession } from './session';
-import { authorize, rateLimited, type User } from './access';
+import { authorize, type User } from './access';
+import { closeRateLimiter, connectRateLimiter, rateLimited } from './rate-limit';
 
 const ASSET = process.env.ASSET_SERVICE_URL ?? 'http://localhost:3002';
 const TICKET = process.env.TICKET_SERVICE_URL ?? 'http://localhost:3001';
@@ -31,7 +32,14 @@ function currentUser(req: Request): User | null {
 }
 
 async function guard(req: Request, res: Response, next: NextFunction) {
-  if (rateLimited(req.ip ?? '', req.method, req.path)) {
+  let limited: boolean;
+  try {
+    limited = await rateLimited(req.ip ?? '', req.method, req.path);
+  } catch {
+    res.status(503).json({ message: 'Proteção contra excesso de requisições temporariamente indisponível.' });
+    return;
+  }
+  if (limited) {
     res.status(429).json({ message: 'Muitas requisições. Tente de novo em um minuto.' });
     return;
   }
@@ -123,5 +131,14 @@ export async function createApp() {
 }
 if (require.main === module) {
   startMetricsServer();
-  createApp().then((app) => app.listen(process.env.PORT ?? 3000));
+  connectRateLimiter().then(async () => {
+    const app = await createApp();
+    app.enableShutdownHooks();
+    process.once('SIGTERM', () => void closeRateLimiter());
+    process.once('SIGINT', () => void closeRateLimiter());
+    await app.listen(process.env.PORT ?? 3000);
+  }).catch((error) => {
+    console.error(`Falha ao iniciar o rate limit distribuído: ${error.message}`);
+    process.exit(1);
+  });
 }
