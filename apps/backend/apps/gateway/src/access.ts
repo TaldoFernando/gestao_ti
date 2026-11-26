@@ -27,25 +27,23 @@ export function authorize(method: string, path: string, user: User | null): 401 
   return (method === 'GET' && RESPONSAVEL_READS.test(path)) || SELF_PROFILE.test(path) && ['GET', 'PATCH'].includes(method) ? null : 403;
 }
 
-// Janela fixa por IP e grupo de rota.
-// ponytail: memória de um processo só; Redis se o gateway tiver mais de uma réplica.
+// Janela fixa por IP e grupo de rota. O contador é fornecido por Redis para que
+// todas as réplicas do gateway compartilhem o mesmo limite.
 const LIMITS: [RegExp, number][] = [
   [/^POST \/api\/auth\/login$/, 5],
   [/^POST \/api\/tickets$/, 10],
   [/./, 300],
 ];
-const hits = new Map<string, { count: number; resetAt: number }>();
 
-export function rateLimited(ip: string, method: string, path: string, now = Date.now()) {
-  // Só para o teste de carga medir a capacidade sem o limitador (ver docs/testes.md). Nunca em produção.
-  if (process.env.RATE_LIMIT_OFF === '1') return false;
-  const key = `${method} ${path}`;
-  const index = LIMITS.findIndex(([re]) => re.test(key));
-  const bucket = `${ip}|${index}`;
-  const entry = hits.get(bucket);
-  if (!entry || entry.resetAt <= now) {
-    hits.set(bucket, { count: 1, resetAt: now + 60_000 });
-    return false;
-  }
-  return ++entry.count > LIMITS[index][1];
+export type IncrementBucket = (key: string, windowMs: number) => Promise<number>;
+
+export function createRateLimiter(increment: IncrementBucket) {
+  return async (ip: string, method: string, path: string) => {
+    // Só para o teste de carga medir a capacidade sem o limitador (ver docs/testes.md). Nunca em produção.
+    if (process.env.RATE_LIMIT_OFF === '1') return false;
+    const route = `${method} ${path}`;
+    const index = LIMITS.findIndex(([re]) => re.test(route));
+    const count = await increment(`gestao-ti:rate-limit:${ip}:${index}`, 60_000);
+    return count > LIMITS[index][1];
+  };
 }
