@@ -15,10 +15,17 @@ q() { curl -s -G "$P/api/v1/query" --data-urlencode "query=$1" | j "Number((o.da
 eventually() { for _ in $(seq 1 24); do [ "$(eval "$1")" = "$2" ] && break; sleep 5; done; expect "$(eval "$1")" "$2" "$3"; }
 grafana() { curl -s -u "admin:${GRAFANA_ADMIN_PASSWORD:-troque-esta-senha}" "$G$1"; }
 
+# O número de targets varia com --scale; conte todas as réplicas e o RabbitMQ.
+target_count=0
+for service in gateway ticket-service asset-service notification-worker rabbitmq; do
+  replicas=$(docker compose ps -q "$service" | awk 'NF { count++ } END { print count + 0 }')
+  target_count=$((target_count + replicas))
+done
+
 # Tráfego pelo gateway numa rota pública.
 for _ in $(seq 1 10); do curl -s -o /dev/null -H 'X-Requested-With: gestao-ti' "$B/sectors"; done
 
-eventually "curl -s $P/api/v1/targets | j \"o.data.activeTargets.filter(t=>t.health==='up').length\"" 5 "Prometheus coleta os 4 serviços e o RabbitMQ"
+eventually "curl -s $P/api/v1/targets | j \"o.data.activeTargets.filter(t=>t.health==='up').length\"" "$target_count" "Prometheus coleta todos os serviços e suas réplicas"
 eventually "q 'sum(http_requests_total{service=\"gateway\",route=\"/api/sectors\"}) >= bool 10'" 1 "gateway conta as requisições por rota"
 expect "$(q 'sum(http_requests_total{service="asset-service",route="/api/sectors"}) >= bool 10')" 1 "o asset-service também (a chamada passou do gateway para ele)"
 expect "$(q 'count(http_request_duration_seconds_bucket{service="gateway"}) > bool 0')" 1 "latência medida no histograma"
