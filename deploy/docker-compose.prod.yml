@@ -1,0 +1,183 @@
+# Produção com deploy blue-green (ADR 0008, issue #17). Não use direto: rode deploy/deploy.sh <tag>.
+#
+#   cliente ─► edge (nginx) ─► web-blue ─► gateway-blue ─► ticket-service-blue / asset-service-blue ─┐
+#                          └╌╌► web-green ─► gateway-green ─► ...-green  (versão nova, sobe ao lado)  ├─► postgres, rabbitmq
+#                                                                       notification-worker (único) ─┘
+#
+# Cada cor tem a sua rede, onde os serviços dela respondem pelos nomes de sempre (gateway, ticket-service,
+# asset-service). Assim as imagens são as mesmas do docker-compose.yml de desenvolvimento, sem mudar configuração.
+# Bancos, broker e e-mail ficam na rede "shared" e são os mesmos para as duas cores.
+name: gestao_ti_prod
+
+x-backend: &backend
+  env_file: ../.env
+  restart: unless-stopped
+  healthcheck:
+    test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+    interval: 5s
+    retries: 24
+
+x-postgres: &postgres
+  image: postgres:16-alpine
+  env_file: ../.env
+  restart: unless-stopped
+  networks: [shared]
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+    interval: 5s
+    retries: 10
+
+x-gateway-env: &gateway-env
+  TICKET_SERVICE_URL: http://ticket-service:3000
+  ASSET_SERVICE_URL: http://asset-service:3000
+  RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672
+  TRUST_PROXY_HOPS: 2 # cliente → edge → web → gateway
+
+x-ticket-env: &ticket-env
+  DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres-tickets:5432/db_tickets
+  RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672
+  ASSET_SERVICE_URL: http://asset-service:3000
+  UPLOAD_DIR: /data/uploads
+
+x-asset-env: &asset-env
+  DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres-assets:5432/db_assets
+
+x-web: &web
+  restart: unless-stopped
+  healthcheck:
+    test: ["CMD", "wget", "-qO-", "http://127.0.0.1/api/health"]
+    interval: 5s
+    retries: 24
+
+services:
+  # Porta de entrada. Encaminha tudo para a cor ativa, definida em state/active.conf pelo deploy.sh.
+  edge:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports: ["${HTTP_PORT:-8080}:80"]
+    volumes:
+      - ./edge.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./state:/etc/nginx/upstream:ro
+    networks: [shared]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/api/health"]
+      interval: 5s
+      retries: 12
+
+  # ---------------------------------------------------------------- azul
+  web-blue:
+    <<: *web
+    image: ${IMAGE_PREFIX}-web:${BLUE_TAG}
+    networks: { shared: {}, blue: {} }
+    depends_on: { gateway-blue: { condition: service_healthy } }
+
+  gateway-blue:
+    <<: *backend
+    image: ${IMAGE_PREFIX}-gateway:${BLUE_TAG}
+    environment: *gateway-env
+    networks: { shared: {}, blue: { aliases: [gateway] } }
+    depends_on:
+      ticket-service-blue: { condition: service_healthy }
+      asset-service-blue: { condition: service_healthy }
+
+  ticket-service-blue:
+    <<: *backend
+    image: ${IMAGE_PREFIX}-ticket-service:${BLUE_TAG}
+    environment: *ticket-env
+    volumes: [uploads:/data/uploads]
+    networks: { shared: {}, blue: { aliases: [ticket-service] } }
+    depends_on:
+      postgres-tickets: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  asset-service-blue:
+    <<: *backend
+    image: ${IMAGE_PREFIX}-asset-service:${BLUE_TAG}
+    environment: *asset-env
+    networks: { shared: {}, blue: { aliases: [asset-service] } }
+    depends_on: { postgres-assets: { condition: service_healthy } }
+
+  # ---------------------------------------------------------------- verde
+  web-green:
+    <<: *web
+    image: ${IMAGE_PREFIX}-web:${GREEN_TAG}
+    networks: { shared: {}, green: {} }
+    depends_on: { gateway-green: { condition: service_healthy } }
+
+  gateway-green:
+    <<: *backend
+    image: ${IMAGE_PREFIX}-gateway:${GREEN_TAG}
+    environment: *gateway-env
+    networks: { shared: {}, green: { aliases: [gateway] } }
+    depends_on:
+      ticket-service-green: { condition: service_healthy }
+      asset-service-green: { condition: service_healthy }
+
+  ticket-service-green:
+    <<: *backend
+    image: ${IMAGE_PREFIX}-ticket-service:${GREEN_TAG}
+    environment: *ticket-env
+    volumes: [uploads:/data/uploads]
+    networks: { shared: {}, green: { aliases: [ticket-service] } }
+    depends_on:
+      postgres-tickets: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+
+  asset-service-green:
+    <<: *backend
+    image: ${IMAGE_PREFIX}-asset-service:${GREEN_TAG}
+    environment: *asset-env
+    networks: { shared: {}, green: { aliases: [asset-service] } }
+    depends_on: { postgres-assets: { condition: service_healthy } }
+
+  # ---------------------------------------------------------------- compartilhados
+  # Worker único, trocado por recriação: enquanto ele reinicia, as mensagens esperam na fila.
+  # Uma instância só mantém a deduplicação por messageId (ADR 0004) valendo durante a troca de cor.
+  notification-worker:
+    image: ${IMAGE_PREFIX}-notification-worker:${WORKER_TAG}
+    env_file: ../.env
+    restart: unless-stopped
+    environment:
+      RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq:5672
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8080}
+    networks: [shared]
+    depends_on: { rabbitmq: { condition: service_healthy } }
+
+  postgres-tickets:
+    <<: *postgres
+    environment: { POSTGRES_DB: db_tickets }
+    volumes: [pgdata-tickets:/var/lib/postgresql/data]
+
+  postgres-assets:
+    <<: *postgres
+    environment: { POSTGRES_DB: db_assets }
+    volumes: [pgdata-assets:/var/lib/postgresql/data]
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    env_file: ../.env
+    restart: unless-stopped
+    networks: [shared]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      retries: 10
+
+  # SMTP de teste da demonstração. Em produção real, aponte SMTP_HOST/SMTP_PORT no .env para o servidor da prefeitura.
+  mailpit:
+    image: axllent/mailpit:v1.21
+    restart: unless-stopped
+    ports: ["${MAILPIT_PORT:-8025}:8025"]
+    networks: [shared]
+
+networks:
+  shared:
+  blue:
+  green:
+
+volumes:
+  pgdata-tickets:
+  pgdata-assets:
+  uploads:

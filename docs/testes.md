@@ -10,6 +10,10 @@ Cada decisão de arquitetura tem um teste que falha se ela quebrar. Todos rodam 
 | Integração | `scripts/smoke-scope.sh` | (cria e apaga os próprios dados) escopo do responsável (lista, detalhe, histórico, filtro por setor alheio), registro de movimentações | 0007 |
 | Resiliência | `scripts/smoke-notify.sh` | RabbitMQ parado, SMTP parado (retry → DLQ), inventário parado | 0001, 0004 |
 | Carga | `load/k6.js` (k6 em container) | capacidade com 70 usuários virtuais e comportamento do rate limit | 0003 |
+| Interface | `e2e/tests/*.spec.ts` (Playwright, Chromium) | login e logout, chamado público e consulta pelo protocolo, técnico assume/responde/resolve (nota interna invisível ao cidadão), cadastro/edição/exclusão de equipamento, responsável sem botões de edição e com o termo em PDF | 0006, 0007 |
+| Observabilidade | `scripts/smoke-metrics.sh` | Prometheus coleta os 4 serviços e as 3 filas do RabbitMQ, métricas por rota e status, healthcheck fora das métricas, métricas não públicas, Grafana com o painel provisionado | — |
+| Deploy | `deploy/test-bluegreen.sh` | blue-green v1 → v2 → rollback com tráfego contínuo: zero falhas, sessão mantida, só a cor ativa no ar | 0008 |
+| Migrações | `scripts/check-migrations.sh` | nenhuma migração apaga, renomeia ou torna obrigatório sem a marca de contração | 0008 |
 
 ## Resultados (12/11/2026, máquina de desenvolvimento, Docker Desktop no Windows)
 
@@ -60,6 +64,7 @@ cp .env.example .env
 docker compose up -d --build --wait
 ./scripts/smoke-assets.sh && ./scripts/smoke-tickets.sh && ./scripts/smoke-scope.sh
 ./scripts/smoke-notify.sh          # para e religa containers
+bash scripts/smoke-metrics.sh      # Prometheus e Grafana
 (cd apps/backend && npm test)
 
 # carga (limitador desligado só durante o teste)
@@ -71,9 +76,41 @@ docker compose up -d gateway       # religa o limitador
 
 O limite de login (5/min por IP) vale para os scripts também. Entre rodadas seguidas, espere 1 minuto ou rode `docker compose restart gateway`.
 
+## Interface, observabilidade e deploy (issues #13, #14 e #17)
+
+Os três rodam no CI em jobs próprios (`e2e`, `integration` e `deploy`).
+
+### Testes de interface (Playwright)
+
+```bash
+docker compose up -d --build --wait
+cd e2e && npm install && npx playwright install chromium
+npx playwright test               # 8 testes; o relatório com prints de falha fica em e2e/playwright-report
+```
+
+Os testes criam os próprios dados com nomes únicos, então podem rodar de novo no mesmo banco. Eles fazem 3 logins: se rodar várias vezes seguidas, desligue o limitador (`RATE_LIMIT_OFF=1` no `.env`) ou espere 1 minuto.
+
+### Observabilidade (Prometheus + Grafana)
+
+Cada serviço expõe `/metrics` na porta interna 9464 (fora do gateway, então nada disso fica público): requisições por rota e status, histograma de latência, CPU e memória do processo. O worker conta as notificações por desfecho (enviada, repetida, retry, dlq), e o plugin `rabbitmq_prometheus` informa o tamanho de cada fila. O Grafana (http://localhost:3001) já abre no painel **Gestão de TI — visão geral**:
+
+- linha de cima: req/s, latência p95, taxa de erro 5xx e mensagens na DLQ, os mesmos números do teste de carga;
+- requisições e latência por serviço, respostas por status (429 do limitador, 503 do isolamento), rotas mais chamadas;
+- filas do RabbitMQ, notificações processadas, memória e CPU.
+
+Para ver os números do teste de carga no painel, rode o k6 (seção "Como reproduzir") com o Grafana aberto nos últimos 15 minutos.
+
+> **Prints do painel:** _adicionar aqui os prints do Grafana durante o teste de carga e durante o `smoke-notify.sh` (DLQ subindo)._
+
+### Deploy blue-green
+
+```bash
+IMAGE_PREFIX=local/gestao_ti TAGS="v1 v2" deploy/publish.sh --no-push   # imagens locais, sem publicar
+bash deploy/test-bluegreen.sh                                            # mesmo teste do CI
+```
+
 ## Não coberto
 
-- Testes de interface automatizados no navegador. As telas foram verificadas manualmente com o Playwright durante o desenvolvimento, sem uma suíte.
 - Carga com múltiplas réplicas dos serviços: o rate limit e o publisher do outbox assumem uma instância (ADRs 0003 e 0004).
 
 ## Validação das issues de TaldoFernando — 23/11/2026

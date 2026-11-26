@@ -78,6 +78,8 @@ services:
     image: rabbitmq:3-management-alpine
     env_file: .env
     ports: ["15672:15672"]
+    # Liga o plugin rabbitmq_prometheus (porta 15692) para o Prometheus ler o tamanho das filas.
+    volumes: [./observability/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro]
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
@@ -86,6 +88,35 @@ services:
   mailpit:
     image: axllent/mailpit:v1.21
     ports: ["8025:8025"]
+
+  # Observabilidade (issue #14): o Prometheus lê /metrics de cada serviço (porta interna 9464) e as filas do
+  # RabbitMQ; o Grafana já sobe com a fonte de dados e o painel "Gestão de TI — visão geral".
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    ports: ["9090:9090"]
+    volumes: [./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9090/-/ready"]
+      interval: 5s
+      retries: 10
+
+  grafana:
+    image: grafana/grafana:11.3.1
+    ports: ["3001:3000"]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-troque-esta-senha}
+      # Leitura sem login, para abrir o painel direto na apresentação; editar exige o admin.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/gestao-ti.json
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on: [prometheus]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 5s
+      retries: 20
 
 volumes:
   pgdata-tickets:

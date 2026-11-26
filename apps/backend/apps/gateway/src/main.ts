@@ -3,7 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { Readable } from 'node:stream';
-import { HealthController } from '@app/common';
+import { HealthController, httpMetrics, startMetricsServer } from '@app/common';
 import { deadLetters } from './dlq';
 import { COOKIE, cookieOptions, sessionToken, csrfAllowed, clearSession } from './session';
 import { authorize, rateLimited, type User } from './access';
@@ -99,7 +99,9 @@ export class AppModule {}
 
 export async function createApp() {
   const app = await NestFactory.create(AppModule, { bodyParser: false });
-  app.getHttpAdapter().getInstance().set('trust proxy', 1); // IP real vem do nginx
+  // IP real vem do nginx. Atrás de mais um proxy (borda do blue-green, ADR 0008) são 2 saltos.
+  app.getHttpAdapter().getInstance().set('trust proxy', Number(process.env.TRUST_PROXY_HOPS ?? 1));
+  app.use(httpMetrics);
   app.use(guard);
   app.use('/api/auth/login', express.json(), (req: Request, res: Response, next: NextFunction) =>
     req.method === 'POST' ? login(req, res) : next());
@@ -119,4 +121,7 @@ export async function createApp() {
   app.setGlobalPrefix('api');
   return app;
 }
-if (require.main === module) createApp().then((app) => app.listen(process.env.PORT ?? 3000));
+if (require.main === module) {
+  startMetricsServer();
+  createApp().then((app) => app.listen(process.env.PORT ?? 3000));
+}

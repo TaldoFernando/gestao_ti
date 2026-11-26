@@ -12,7 +12,7 @@ Projeto final de Engenharia de Sistemas Distribuídos 2026.1 (UFPB, Centro de In
 |---|---|
 | Cidadão / servidor (sem login) | abre chamado com fotos, PDF ou vídeo; recebe o protocolo `JAC-XXXX-XXXX` e e-mails a cada mudança; acompanha o status pelo protocolo |
 | Técnico de TI | fila por status e prioridade; assume, responde (público ou nota interna), muda status; CRUD de setores, locais e equipamentos; histórico de movimentação; cadastro de usuários |
-| Responsável do setor | vê só os equipamentos do próprio setor e locais vinculados; imprime o relatório com campos de assinatura |
+| Responsável do setor | vê só os equipamentos do próprio setor e locais vinculados; imprime ou baixa em PDF o termo de responsabilidade com campos de assinatura |
 
 ## Arquitetura
 
@@ -72,18 +72,20 @@ C4Container
 | Transactional Outbox + EDA | `ticket-service/src/outbox.ts` | [0004](docs/adr/0004-outbox-rabbitmq.md) |
 | Retry + DLQ | filas `notifications.retry` e `.dlq` | [0004](docs/adr/0004-outbox-rabbitmq.md) |
 | Bulkhead / isolamento de falhas | chamado abre com o inventário fora; gateway responde 503 | [0001](docs/adr/0001-microsservicos.md) |
+| Blue-green deployment | `deploy/`: duas cores atrás de um nginx de borda, troca sem indisponibilidade e rollback | [0008](docs/adr/0008-deploy-blue-green.md) |
+| Observabilidade (métricas) | `/metrics` em cada serviço, Prometheus e painel no Grafana | — |
 
-Áreas cobertas: **segurança** (JWT, perfis, rate limit, cabeçalhos forjados descartados, protocolo não enumerável, segredos em `.env`), **confiabilidade** (outbox, retry, DLQ, isolamento), **desempenho** (teste de carga, keepalive) e **deployment** (Docker Compose, CI).
+Áreas cobertas: **segurança** (JWT, perfis, rate limit, cabeçalhos forjados descartados, protocolo não enumerável, segredos em `.env`), **confiabilidade** (outbox, retry, DLQ, isolamento), **desempenho** (teste de carga, keepalive), **observabilidade** (Prometheus e Grafana) e **deployment** (Docker Compose, CI, imagens no GHCR, blue-green com rollback).
 
 Outras decisões: [stack TypeScript (0005)](docs/adr/0005-stack-typescript.md), [privacidade do chamado público (0006)](docs/adr/0006-privacidade-chamado-publico.md), [escopo do responsável (0007)](docs/adr/0007-escopo-responsavel.md).
 
 ### Trade-offs principais
 
 - **Consistência eventual entre serviços:** o nome do setor é copiado no chamado e não muda se o setor for renomeado (ADR 0002).
-- **E-mail pelo menos uma vez:** em caso raro de queda entre o confirm e o update do outbox, o e-mail pode sair duplicado (ADR 0004).
+- **E-mail pelo menos uma vez:** em caso raro de queda entre o confirm e o update do outbox, o evento é publicado de novo; o worker ignora o repetido pelo `messageId`, mas só enquanto não reiniciar (ADR 0004).
 - **Instância única:** o rate limit fica em memória e o publisher do outbox não usa `SKIP LOCKED`. Escalar o gateway ou o ticket-service exige Redis e `SKIP LOCKED` (ADRs 0003 e 0004).
 - **Usuários no asset-service** em vez de um serviço de autenticação próprio (ADR 0007).
-- **Relatório por `@media print`** em vez de geração de PDF no servidor.
+- **Termo em PDF gerado no servidor** (`GET /api/sectors/:id/report.pdf`, com pdfkit) além da impressão pelo navegador: o arquivo sai igual em qualquer navegador e tem nº e data de emissão; em troca, o layout fica duplicado (tela e PDF).
 
 ## Como executar
 
@@ -100,6 +102,8 @@ docker compose up -d --build --wait
 | http://localhost:8080/abrir-chamado | formulário público |
 | http://localhost:8025 | Mailpit: e-mails enviados |
 | http://localhost:15672 | painel do RabbitMQ (usuário e senha do `.env`) |
+| http://localhost:3001 | Grafana: painel "Gestão de TI — visão geral" (leitura sem login; admin com `GRAFANA_ADMIN_PASSWORD`) |
+| http://localhost:9090 | Prometheus: métricas brutas e alvos coletados |
 
 O banco começa com os setores e equipamentos de exemplo do protótipo. Para zerar tudo: `docker compose down -v`.
 
@@ -111,6 +115,10 @@ cd apps/backend && npm install && npm run start:dev   # ver nest-cli.json para c
 cd apps/web && npm install && npm run dev             # Vite com proxy /api → :3000
 ```
 
+### Deploy em produção (blue-green)
+
+O CI publica as imagens no GitHub Container Registry a cada push que passa nos testes. No servidor, `deploy/deploy.sh sha-<commit>` sobe a versão nova ao lado da atual, testa, troca o tráfego sem derrubar ninguém e desliga a antiga; `deploy/deploy.sh rollback` volta. Detalhes, regras de migração e comandos em [ADR 0008](docs/adr/0008-deploy-blue-green.md).
+
 ### Estrutura
 
 ```
@@ -119,9 +127,12 @@ apps/backend/          monorepo Nest
   apps/ticket-service/   chamados, anexos, outbox      (prisma/)
   apps/asset-service/    setores, equipamentos, usuários (prisma/)
   apps/notification-worker/  consumidor RabbitMQ → e-mail
-  libs/common/           healthcheck e topologia AMQP compartilhada
+  libs/common/           healthcheck, métricas e topologia AMQP compartilhada
 apps/web/              React + Vite + Tailwind (design "Contraste editorial")
 scripts/               testes de integração e resiliência
+e2e/                   testes de interface no navegador (Playwright)
+observability/         Prometheus, painel do Grafana e plugin de métricas do RabbitMQ
+deploy/                compose de produção, publicação das imagens e deploy blue-green
 load/k6.js             teste de carga
 docs/adr/              decisões de arquitetura
 docs/testes.md         plano e resultados de testes
@@ -131,7 +142,12 @@ docs/testes.md         plano e resultados de testes
 
 Plano completo e resultados medidos em **[docs/testes.md](docs/testes.md)**. Resumo: 8 testes unitários, 45 verificações de integração e resiliência (também no CI) e teste de carga com **1.530 req/s, 0% de falhas e p95 abaixo de 60 ms**. A primeira rodada de carga revelou o esgotamento de portas no nginx (61% de 502), corrigido com keepalive.
 
-CI (GitHub Actions): checagem de tipos, testes unitários e build do back e do front; depois sobe o Compose inteiro e roda os scripts de integração e resiliência.
+CI (GitHub Actions), em paralelo depois dos builds:
+- **backend / web:** checagem de tipos, regra das migrações, testes unitários e build;
+- **integration:** sobe o Compose inteiro e roda os scripts de integração, resiliência e métricas;
+- **e2e:** testes de interface com o Playwright no Chromium (login, chamado público, atendimento, inventário, perfil do responsável);
+- **deploy:** faz um blue-green completo (v1 → v2 → rollback) com tráfego contínuo e exige zero falhas;
+- **publish:** só em push e com tudo verde, publica as imagens no GitHub Container Registry.
 
 ## Equipe e responsabilidades
 
@@ -178,6 +194,10 @@ oficial do WhatsApp, importação CSV e testes. Também preparou documentação 
 e um registro de pendências externas. Não realizou entrevistas nem contato com o
 professor e não produziu depoimentos pessoais dos integrantes. A avaliação individual
 sobre o uso da ferramenta deve ser escrita pelo próprio integrante após revisar o PR.
+
+### Assistência nesta rodada — Claude (issues de JVBeltrao)
+
+O Claude (modelo Claude Opus 5.5, Anthropic) foi usado, a pedido de JVBeltrao, nas issues #20 (termo em PDF), #13 (testes de interface com Playwright), #14 (métricas, Prometheus e Grafana) e #17 (imagens no GHCR e deploy blue-green). Ele gerou o código, os testes e o ADR 0008 e simulou os merges com a `refactor/fullstack` antes do commit. Foi assim que apareceu a quebra do download do PDF depois da troca para o cookie de sessão (#12), corrigida antes de subir. Como o ambiente do Claude não alcança os registros de imagens nem o download de navegadores, a validação com o sistema rodando ficou a cargo do CI. Os commits foram revisados e feitos pelo próprio integrante. _A avaliação individual sobre o uso da ferramenta deve ser escrita pelo integrante._
 
 ## Operação das novas funcionalidades
 

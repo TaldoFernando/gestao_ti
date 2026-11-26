@@ -13,6 +13,8 @@ jobs:
         with: { node-version: 22, cache: npm, cache-dependency-path: apps/backend/package-lock.json }
       - run: npm ci
       - run: npm run lint
+      # Migrações só expandem o banco: a versão antiga continua no ar durante o blue-green (ADR 0008).
+      - run: bash ../../scripts/check-migrations.sh
       - run: npm test
       - run: npm run build
 
@@ -38,8 +40,60 @@ jobs:
       - run: ./scripts/smoke-scope.sh
       - run: ./scripts/smoke-notify.sh
       - run: ./scripts/smoke-operations.sh
+      - run: bash scripts/smoke-metrics.sh
       # Zera o limitador de login (memória do gateway) antes do teste que termina bloqueando o login.
       - run: docker compose restart gateway && docker compose up -d --wait gateway
       - run: ./scripts/smoke-assets.sh
       - if: failure()
         run: docker compose logs --tail 200
+
+  # Testes de interface no navegador (issue #13), contra o sistema inteiro no Docker.
+  e2e:
+    runs-on: ubuntu-latest
+    needs: [backend, web]
+    defaults: { run: { working-directory: e2e } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: e2e/package-lock.json }
+      # Todos os testes saem do mesmo IP: sem o limitador, o 6º login no mesmo minuto não seria recusado.
+      - run: cp .env.example .env && echo RATE_LIMIT_OFF=1 >> .env
+        working-directory: .
+      # Só o que as telas usam (sem Prometheus/Grafana).
+      - run: docker compose up -d --build --wait --wait-timeout 300 web notification-worker
+        working-directory: .
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with: { name: playwright-report, path: e2e/playwright-report, retention-days: 7 }
+      - if: failure()
+        run: docker compose logs --tail 200
+        working-directory: .
+
+  # Deploy blue-green de ponta a ponta (issue #17): v1 → v2 → rollback com tráfego contínuo e zero falhas.
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [backend, web]
+    steps:
+      - uses: actions/checkout@v4
+      - run: cp .env.example .env && echo RATE_LIMIT_OFF=1 >> .env
+      - run: IMAGE_PREFIX=local/gestao_ti TAGS="v1 v2" bash deploy/publish.sh --no-push
+      - run: bash deploy/test-bluegreen.sh
+      - if: failure()
+        run: docker compose -f deploy/docker-compose.prod.yml --env-file .env logs --tail 100
+
+  # Publica as imagens no GitHub Container Registry (issue #17) quando tudo passou.
+  # Tags: sha-<commit> (imutável, a que vai para o deploy) e o nome da branch.
+  publish:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    needs: [integration, e2e, deploy]
+    permissions: { contents: read, packages: write }
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - run: |
+          BRANCH="${GITHUB_REF_NAME//\//-}"
+          IMAGE_PREFIX="ghcr.io/${{ github.repository_owner }}/gestao_ti" TAGS="sha-${GITHUB_SHA::7} $BRANCH" bash deploy/publish.sh
