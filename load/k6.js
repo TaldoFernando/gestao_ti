@@ -22,13 +22,18 @@ export const options = {
 };
 
 export function setup() {
-  const login = http.post(`${BASE}/auth/login`, JSON.stringify({ email: __ENV.ADMIN_EMAIL, password: __ENV.ADMIN_PASSWORD }), { headers: { 'content-type': 'application/json', 'X-Requested-With': 'gestao-ti' } });
-  const created = http.post(`${BASE}/tickets`, { requesterName: 'Carga', email: 'carga@exemplo.com', whatsapp: '83999990000', title: 'Teste de carga', description: 'k6' }, { headers: { 'X-Requested-With': 'gestao-ti' } });
-  return { cookie: login.cookies['ti-session'][0].value, protocol: created.json('protocol') };
+  const headers = { 'content-type': 'application/json', 'X-Requested-With': 'gestao-ti' };
+  const login = http.post(`${BASE}/auth/login`, JSON.stringify({ email: __ENV.ADMIN_EMAIL, password: __ENV.ADMIN_PASSWORD }), { headers });
+  const created = http.post(`${BASE}/tickets`, JSON.stringify({ requesterName: 'Carga', email: 'carga@exemplo.com', whatsapp: '83999990000', title: 'Teste de carga', description: 'k6' }), { headers });
+  const cookie = login.cookies['ti-session']?.[0]?.value;
+  const protocol = created.json('protocol');
+  if (login.status !== 200 || !cookie) throw new Error(`Login de carga falhou: HTTP ${login.status}`);
+  if (created.status !== 201 || !protocol) throw new Error(`Chamado de preparação não retornou protocolo: HTTP ${created.status}`);
+  return { cookie, protocol };
 }
 
 export function openTicket() {
-  const res = http.post(`${BASE}/tickets`, { requesterName: 'Carga', email: 'carga@exemplo.com', whatsapp: '83999990000', title: 'Teste de carga', description: 'k6' }, { headers: { 'X-Requested-With': 'gestao-ti' } });
+  const res = http.post(`${BASE}/tickets`, JSON.stringify({ requesterName: 'Carga', email: 'carga@exemplo.com', whatsapp: '83999990000', title: 'Teste de carga', description: 'k6' }), { headers: { 'content-type': 'application/json', 'X-Requested-With': 'gestao-ti' } });
   check(res, { '201': (r) => r.status === 201 });
 }
 
