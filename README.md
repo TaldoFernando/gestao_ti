@@ -42,6 +42,7 @@ C4Container
   System_Boundary(s, "Sistema da Prefeitura") {
     Container(web, "Web", "React + TypeScript + Tailwind, servido por nginx", "Telas públicas e área logada; proxy /api com keepalive")
     Container(gateway, "API Gateway", "NestJS", "Login e JWT, regras por perfil, rate limit, proxy")
+    ContainerDb(redis, "Redis", "Redis 7", "Janelas compartilhadas do rate limit")
     Container(tickets, "ticket-service", "NestJS + Prisma", "Chamados, anexos, histórico, outbox")
     Container(assets, "asset-service", "NestJS + Prisma", "Setores, equipamentos, movimentações, usuários")
     Container(worker, "notification-worker", "Node + amqplib + nodemailer", "Consome eventos e envia e-mails; retry e DLQ")
@@ -52,6 +53,7 @@ C4Container
   System_Ext(smtp, "SMTP", "Mailpit no dev")
   Rel(usuarios, web, "Usa", "HTTPS")
   Rel(web, gateway, "/api", "HTTP keepalive")
+  Rel(gateway, redis, "Contadores do rate limit", "Redis")
   Rel(gateway, tickets, "Repassa /api/tickets", "HTTP")
   Rel(gateway, assets, "Repassa /api/sectors, /equipment, /users; confere senha", "HTTP")
   Rel(tickets, assets, "Valida setor (timeout 2s, tolera falha)", "HTTP")
@@ -83,7 +85,7 @@ Outras decisões: [stack TypeScript (0005)](docs/adr/0005-stack-typescript.md), 
 
 - **Consistência eventual entre serviços:** o nome do setor é copiado no chamado e não muda se o setor for renomeado (ADR 0002).
 - **E-mail pelo menos uma vez:** em caso raro de queda entre o confirm e o update do outbox, o evento é publicado de novo; o worker ignora o repetido pelo `messageId`, mas só enquanto não reiniciar (ADR 0004).
-- **Instância única:** o rate limit fica em memória e o publisher do outbox não usa `SKIP LOCKED`. Escalar o gateway ou o ticket-service exige Redis e `SKIP LOCKED` (ADRs 0003 e 0004).
+- **Réplicas:** o rate limit é compartilhado pelo Redis e publishers do outbox usam `FOR UPDATE SKIP LOCKED`, permitindo escalar o gateway e o ticket-service (ADRs 0003 e 0004).
 - **Usuários no asset-service** em vez de um serviço de autenticação próprio (ADR 0007).
 - **Termo em PDF gerado no servidor** (`GET /api/sectors/:id/report.pdf`, com pdfkit) além da impressão pelo navegador: o arquivo sai igual em qualquer navegador e tem nº e data de emissão; em troca, o layout fica duplicado (tela e PDF).
 

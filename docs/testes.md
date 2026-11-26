@@ -8,6 +8,7 @@ Cada decisão de arquitetura tem um teste que falha se ela quebrar. Todos rodam 
 | Integração | `scripts/smoke-assets.sh` | (cria e apaga os próprios dados) CRUD do inventário via gateway, regras no banco (RESTRICT / SET NULL), validação, login, JWT, cabeçalho forjado, perfil responsável, bloqueio de login | 0002, 0003 |
 | Integração | `scripts/smoke-tickets.sh` | abertura pública com anexo, tipo de arquivo proibido, consulta pública sem dados pessoais, fila do técnico, assumir/status/resposta, nota interna invisível, anexo só com login | 0006 |
 | Integração | `scripts/smoke-scope.sh` | (cria e apaga os próprios dados) escopo do responsável (lista, detalhe, histórico, filtro por setor alheio), registro de movimentações | 0007 |
+| Réplicas | `scripts/smoke-replicas.sh` | limitador compartilhado pelos gateways via Redis; 40 chamados enviados por duas réplicas do ticket-service sem e-mails duplicados | 0003, 0004 |
 | Resiliência | `scripts/smoke-notify.sh` | RabbitMQ parado, SMTP parado (retry → DLQ), inventário parado | 0001, 0004 |
 | Carga | `load/k6.js` (k6 em container) | capacidade com 70 usuários virtuais e comportamento do rate limit | 0003 |
 | Interface | `e2e/tests/*.spec.ts` (Playwright, Chromium) | login e logout, chamado público e consulta pelo protocolo, técnico assume/responde/resolve (nota interna invisível ao cidadão), cadastro/edição/exclusão de equipamento, responsável sem botões de edição e com o termo em PDF | 0006, 0007 |
@@ -67,14 +68,18 @@ docker compose up -d --build --wait
 bash scripts/smoke-metrics.sh      # Prometheus e Grafana
 (cd apps/backend && npm test)
 
-# carga (limitador desligado só durante o teste)
+# réplicas (gateway e ticket-service): Redis compartilhado e outbox concorrente
+docker compose up -d --build --wait --scale gateway=2 --scale ticket-service=2
+./scripts/smoke-replicas.sh
+
+# carga (limitador desligado só durante o teste; mantenha as réplicas ativas)
 RATE_LIMIT_OFF=1 docker compose up -d gateway
 set -a; . ./.env; set +a
 docker run --rm -i --network gestao_ti_default -e ADMIN_EMAIL -e ADMIN_PASSWORD grafana/k6:0.54.0 run - < load/k6.js
 docker compose up -d gateway       # religa o limitador
 ```
 
-O limite de login (5/min por IP) vale para os scripts também. Entre rodadas seguidas, espere 1 minuto ou rode `docker compose restart gateway`.
+O limite de login (5/min por IP) vale para os scripts também. Entre rodadas seguidas, espere 1 minuto ou limpe os contadores com `docker compose exec redis redis-cli FLUSHDB` (somente em ambiente local de teste).
 
 ## Interface, observabilidade e deploy (issues #13, #14 e #17)
 
@@ -111,7 +116,7 @@ bash deploy/test-bluegreen.sh                                            # mesmo
 
 ## Não coberto
 
-- Carga com múltiplas réplicas dos serviços: o rate limit e o publisher do outbox assumem uma instância (ADRs 0003 e 0004).
+- O worker de notificações continua como instância única; sua deduplicação em memória não foi alterada nesta issue.
 
 ## Validação das issues de TaldoFernando — 23/11/2026
 

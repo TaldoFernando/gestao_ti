@@ -35,15 +35,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: cp .env.example .env
-      - run: docker compose up -d --build --wait --wait-timeout 300
+      - run: docker compose up -d --build --wait --wait-timeout 300 --scale gateway=2 --scale ticket-service=2
       - run: ./scripts/smoke-tickets.sh
       - run: ./scripts/smoke-scope.sh
       - run: ./scripts/smoke-notify.sh
       - run: ./scripts/smoke-operations.sh
       - run: bash scripts/smoke-metrics.sh
-      # Zera o limitador de login (memória do gateway) antes do teste que termina bloqueando o login.
-      - run: docker compose restart gateway && docker compose up -d --wait gateway
+      # Zera a janela compartilhada antes do teste que termina bloqueando o login.
+      - run: docker compose exec -T redis redis-cli FLUSHDB
       - run: ./scripts/smoke-assets.sh
+      - run: ./scripts/smoke-replicas.sh
+      # O k6 mede capacidade; os limites funcionais foram validados acima entre réplicas.
+      - run: echo RATE_LIMIT_OFF=1 >> .env
+      - run: docker compose up -d --force-recreate --scale gateway=2 gateway
+      - run: |
+          network=$(docker inspect -f '{{range $name, $value := .NetworkSettings.Networks}}{{$name}}{{end}}' "$(docker compose ps -q web | head -n 1)")
+          docker run --rm --network "$network" --env-file .env --env BASE_URL=http://web/api \
+            -v "$PWD/load/k6.js:/load/k6.js:ro" grafana/k6:0.54.0 run /load/k6.js
       - if: failure()
         run: docker compose logs --tail 200
 
