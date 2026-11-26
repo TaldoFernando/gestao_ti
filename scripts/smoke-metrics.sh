@@ -27,7 +27,7 @@ for _ in $(seq 1 10); do curl -s -o /dev/null -H 'X-Requested-With: gestao-ti' "
 
 eventually "curl -s $P/api/v1/targets | j \"o.data.activeTargets.filter(t=>t.health==='up').length\"" "$target_count" "Prometheus coleta todos os serviços e suas réplicas"
 eventually "q 'sum(http_requests_total{service=\"gateway\",route=\"/api/sectors\"}) >= bool 10'" 1 "gateway conta as requisições por rota"
-expect "$(q 'sum(http_requests_total{service="asset-service",route="/api/sectors"}) >= bool 10')" 1 "o asset-service também (a chamada passou do gateway para ele)"
+eventually "q 'sum(http_requests_total{service=\"asset-service\",route=\"/api/sectors\"}) >= bool 10'" 1 "o asset-service também (a chamada passou do gateway para ele)"
 expect "$(q 'count(http_request_duration_seconds_bucket{service="gateway"}) > bool 0')" 1 "latência medida no histograma"
 expect "$(q 'count(rabbitmq_detailed_queue_messages_ready{queue=~"notifications.*"})')" 3 "tamanho das 3 filas: principal, retry e DLQ"
 expect "$(q 'count(notifications_processed_total) > bool 0')" 1 "worker conta as notificações processadas"
