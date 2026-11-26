@@ -45,6 +45,15 @@ async function guard(req: Request, res: Response, next: NextFunction) {
   }
   if (!csrfAllowed(req)) return void res.status(403).json({ message: 'Origem ou cabeçalho de proteção CSRF inválido.' });
   const user = currentUser(req);
+  // Uma sessão antiga desativada não pode impedir o login de outra conta nem o logout.
+  if (user && !['/api/auth/login', '/api/auth/logout'].includes(req.path)) {
+    const status = await fetch(`${ASSET}/api/auth/status/${encodeURIComponent(user.sub)}`).catch(() => null);
+    if (!status) return void res.status(503).json({ message: 'Serviço de autenticação temporariamente indisponível.' });
+    if (!status.ok || !(await status.json().catch(() => ({ active: false }))).active) {
+      clearSession(res);
+      return void res.status(401).json({ message: 'Sua sessão não é mais válida. Entre novamente.' });
+    }
+  }
   const denied = authorize(req.method, req.path, user);
   if (denied) {
     res.status(denied).json({ message: denied === 401 ? 'Faça login para continuar.' : 'Acesso não permitido para o seu perfil.' });
